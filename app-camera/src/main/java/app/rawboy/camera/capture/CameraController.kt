@@ -346,8 +346,26 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private var rawViewfinder = false
 
     /**
+     * Experimental zero-shutter-lag burst ring buffer is active ([setRawRing]): repeating request streams RAW_SENSOR
+     * frames into [rawRingHandle] so shutter press can merge them immediately without waiting for a captureBurst.
+     */
+    @Volatile
+    private var rawRingWanted = false
+
+    /** Native `RawRingBuffer` handle (BurstNative.ring*); camera thread only. */
+    private var rawRingHandle = 0L
+    private var rawRingWidth = 0
+    private var rawRingHeight = 0
+
+    /** True while a ZSL merge is running so the ring does not reallocate ~200 MB on top of BurstMerger. Camera thread. */
+    private var rawRingPaused = false
+
+    /** Recent repeating-request results keyed by SENSOR_TIMESTAMP, paired with [rawRingHandle] on shutter press. Camera thread. */
+    private val rawRingResults = LinkedHashMap<Long, CaptureResult>()
+
+    /**
      * Sensor timestamps of the repeating request's frames while it carries the raw target, so their images go to
-     * [rawFrames] and never to a still waiting for its own ([pendingImage], [burstSink]). Camera thread only.
+     * [rawFrames] / [rawRingHandle] and never to a still waiting for its own ([pendingImage], [burstSink]). Camera thread only.
      */
     private val streamStamps = LinkedHashSet<Long>()
 
@@ -546,9 +564,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val preview = Surface(surfaceTexture).also { previewSurface = it }
         val reader = ImageReader.newInstance(
             info.rawSize.width, info.rawSize.height, if (info.hiRes) info.maxResFormat else ImageFormat.RAW_SENSOR,
-            // The raw viewfinder copies each streamed frame out at once, but a still may hold one while frames go on
-            // and up to MAX_PARKED wait to be claimed ([parked]).
-            if (info.hiRes) 1 else if (rawViewfinder) 2 + MAX_PARKED else 2,
+            // The raw viewfinder and ZSL ring copy each streamed frame out at once, but a still may hold one while
+            // frames go on and up to MAX_PARKED wait to be claimed ([parked]).
+            if (info.hiRes) 1 else if (rawViewfinder || rawRingWanted) 2 + MAX_PARKED else 2,
         )
         reader.setOnImageAvailableListener({ r ->
             val image = r.acquireNextImage() ?: return@setOnImageAvailableListener
@@ -806,11 +824,49 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         rawViewfinder = on
         handler.post {
             if (!on) {
-                streamStamps.clear()
                 streamLevels = null
+                if (!rawRingWanted) streamStamps.clear()
             }
             if (session != null) repeatPreview()
         }
+    }
+
+    /**
+     * Turns the experimental zero-shutter-lag RAW ring buffer on or off: the repeating request streams RAW_SENSOR
+     * frames into [rawRingHandle] so shutter press can merge them immediately. Turning it off releases native memory
+     * immediately.
+     */
+    fun setRawRing(on: Boolean) {
+        if (rawRingWanted == on) return
+        rawRingWanted = on
+        handler.post {
+            if (!on) {
+                destroyRawRingOnHandler()
+                if (!rawViewfinder) streamStamps.clear()
+            }
+            if (session != null) runCatching { repeatPreview() }
+        }
+    }
+
+    /** Drops any buffered ZSL ring frames (e.g. on memory pressure, EV/focus change, or pause). */
+    fun clearRawRing() {
+        handler.post { clearRawRingOnHandler() }
+    }
+
+    private fun clearRawRingOnHandler() {
+        if (rawRingHandle != 0L) BurstNative.ringClear(rawRingHandle)
+        rawRingResults.clear()
+    }
+
+    private fun destroyRawRingOnHandler() {
+        if (rawRingHandle != 0L) {
+            BurstNative.ringDestroy(rawRingHandle)
+            rawRingHandle = 0L
+            rawRingWidth = 0
+            rawRingHeight = 0
+        }
+        rawRingResults.clear()
+        rawRingPaused = false
     }
 
     /**
@@ -822,24 +878,52 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         depthWanted = source
     }
 
-    /**
-     * Whether [inf] streams raw for the viewfinder: wanted, a sink set, and the default sensor mode (a maximum-resolution
-     * raw can't share a request with the preview).
-     */
-    fun rawStreams(inf: Info): Boolean = rawViewfinder && rawFrames != null && !inf.hiRes
+    private fun rawViewfinderStreams(inf: Info): Boolean = rawViewfinder && rawFrames != null && !inf.hiRes
 
-    /** Copies one streamed raw frame to [rawFrames] with the last frame's levels; camera thread. */
+    private fun rawRingStreams(inf: Info): Boolean = rawRingWanted && !inf.hiRes
+
+    /**
+     * Whether [inf] streams raw on the repeating request (for the raw viewfinder, the ZSL ring buffer, or both);
+     * maximum-resolution raw can't share a request with the preview.
+     */
+    fun rawStreams(inf: Info): Boolean = rawViewfinderStreams(inf) || rawRingStreams(inf)
+
+    /** Copies one streamed raw frame to [rawFrames] and/or [rawRingHandle]; camera thread. */
     private fun offerRawFrame(inf: Info, img: Image) {
-        val sink = rawFrames ?: return
-        val levels = streamLevels ?: return
         if (img.format != ImageFormat.RAW_SENSOR) return
-        val cfa = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT) ?: return
-        val color = inf.cameraToSrgb ?: return
         val plane = img.planes[0]
-        sink.offer(
-            plane.buffer, img.width, img.height, plane.rowStride, cfa, levels.black, levels.white, levels.neutral, color,
-            platform.still.extraBlack, levels.shading, levels.shadingCols, levels.shadingRows, img.timestamp,
-        )
+        if (rawViewfinderStreams(inf)) {
+            val sink = rawFrames
+            val levels = streamLevels
+            val cfa = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT)
+            val color = inf.cameraToSrgb
+            if (sink != null && levels != null && cfa != null && color != null) {
+                sink.offer(
+                    plane.buffer, img.width, img.height, plane.rowStride, cfa, levels.black, levels.white, levels.neutral, color,
+                    platform.still.extraBlack, levels.shading, levels.shadingCols, levels.shadingRows, img.timestamp,
+                )
+            }
+        }
+        if (rawRingStreams(inf) && !rawRingPaused) {
+            if (rawRingHandle == 0L || rawRingWidth != img.width || rawRingHeight != img.height) {
+                if (rawRingHandle != 0L) BurstNative.ringDestroy(rawRingHandle)
+                rawRingHandle = BurstNative.ringCreate(RAW_RING_CAPACITY, img.width, img.height)
+                rawRingWidth = img.width
+                rawRingHeight = img.height
+                rawRingResults.clear()
+            }
+            BurstNative.ringPush(rawRingHandle, plane.buffer, img.width, img.height, plane.rowStride, img.timestamp)
+        }
+    }
+
+    /** Keeps a repeating-request result for pairing with [rawRingHandle] on shutter press; camera thread. */
+    private fun keepRingResult(r: CaptureResult) {
+        val stamp = r.get(CaptureResult.SENSOR_TIMESTAMP) ?: return
+        rawRingResults[stamp] = r
+        while (rawRingResults.size > RAW_RING_RESULT_LIMIT) {
+            val oldest = rawRingResults.keys.firstOrNull() ?: break
+            rawRingResults.remove(oldest)
+        }
     }
 
     /** Keeps [r]'s levels and shading map for the next streamed raw frame ([offerRawFrame]); camera thread. */
@@ -916,14 +1000,15 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private fun repeatPreview() {
         val s = session ?: return
         val inf = info ?: return
-        val raw = rawStreams(inf) && rawReader != null
+        val viewfinderRaw = rawViewfinderStreams(inf) && rawReader != null
+        val ringRaw = rawRingStreams(inf) && rawReader != null
+        val raw = viewfinderRaw || ringRaw
         val request = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
             val preview = previewSurface ?: return
-            // Where the profile allows, the raw viewfinder streams the raw alone: the ISP's preview frames would only
-            // make the viewfinder redraw the raw it already shows.
-            if (!raw || !platform.preview.rawViewfinderAlone) addTarget(preview)
+            // Only drop the ISP's preview when the raw viewfinder itself is drawing from the raw stream.
+            if (!viewfinderRaw || !platform.preview.rawViewfinderAlone) addTarget(preview)
             if (raw) {
-                // Raw viewfinder: every frame to the raw reader, with the shading map to undo.
+                // Raw viewfinder / ZSL ring: every frame to the raw reader, with the shading map to undo / write to DNG.
                 addTarget(rawReader!!.surface)
                 if (inf.hasLensShadingMap) {
                     setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
@@ -948,7 +1033,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
 
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                 val lens = lensResult(result)
-                if (raw) keepStreamLevels(inf, lens)
+                if (viewfinderRaw) keepStreamLevels(inf, lens)
+                if (ringRaw && !rawRingPaused) keepRingResult(lens)
                 lastPreviewResult = lens
                 motionListener?.invoke(lens)
                 val state = frameState(inf, lens, result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
@@ -982,6 +1068,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             focusPoint = x to y
             tracking = false
             _focusSize.value = FOCUS_SIZE
+            clearRawRingOnHandler()
             val inf = info ?: return@post
             triggerFocus(s, inf)
         }
@@ -1117,6 +1204,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         flash: FlashMode = FlashMode.OFF,
         guides: FlashGuides = FlashGuides(),
         burstFrames: Int = 1,
+        /** Prefer merging frames already buffered in the continuous RAW ring buffer ([zslBurstDng]); falls back to [burstDng]. */
+        preferRing: Boolean = false,
         location: Location? = null,
         /** A long exposure instead of a burst ([longExposureDng]); ignored with flash or at maximum resolution. */
         longExposure: LongExposure? = null,
@@ -1135,7 +1224,12 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             // The Pixel's model keeps judging on the frame after the capture, as it was tuned.
             val shutterEv = if (platform.still.compensation == CompensationModel.AE_GAIN_IN_RAW) appliedCompensationEv(_frames.value) else null
             if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, shutterEv, onExposed, onSubmitted)
-            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)
+            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) {
+                if (preferRing && rawRingWanted) {
+                    zslBurstDng(inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)?.let { return@withLock it }
+                }
+                return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)
+            }
             // Ambient exposure before any light comes on: the flash still never needs more.
             val ambient = _frames.value
             var focused = false
@@ -1352,6 +1446,109 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         Log.d(TAG, "raw meter: key $key in ${(System.nanoTime() - started) / 1_000_000} ms (${r.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.div(1000)} µs, " +
             "ISO ${r.get(CaptureResult.SENSOR_SENSITIVITY)}, black ${black.joinToString()}, white $white)")
         return key
+    }
+
+    /**
+     * Zero-shutter-lag burst merge from the continuous RAW ring buffer ([rawRingHandle]): drains up to [frames]
+     * buffered frames (newest paired frame = reference) into [BurstNative] with zero copy, pauses ring refilling
+     * while the merge runs so peak native RAM stays flat, and writes the merged DNG. Returns null if fewer than
+     * [RAW_RING_MIN_FRAMES] recent paired frames are ready so [captureDng] can fall back to [burstDng].
+     */
+    private suspend fun zslBurstDng(
+        inf: Info,
+        frames: Int,
+        exifOrientation: Int,
+        location: Location?,
+        note: String,
+        out: OutputStream,
+        shutterEv: Float?,
+        onSubmitted: () -> Unit,
+    ): Still? {
+        val c = inf.characteristics
+        val white = (c.get(CameraCharacteristics.SENSOR_INFO_WHITE_LEVEL) ?: 1023).toFloat()
+        val staticBlack = c.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)
+        val started = System.nanoTime()
+
+        data class Drained(val handle: Long, val width: Int, val height: Int, val reference: CaptureResult, val count: Int)
+        val drained = CompletableDeferred<Drained?>()
+        val posted = handler.post {
+            val ring = rawRingHandle
+            if (ring == 0L || rawRingWidth < 2 || rawRingHeight < 2) {
+                drained.complete(null)
+                return@post
+            }
+            val stamps = BurstNative.ringTimestamps(ring)
+            if (stamps.isEmpty()) {
+                drained.complete(null)
+                return@post
+            }
+            val newest = stamps.last()
+            // Keep frames that have a paired CaptureResult and are recent relative to the newest buffered frame.
+            val paired = stamps.filter { ts ->
+                rawRingResults.containsKey(ts) && (newest - ts) <= RAW_RING_MAX_AGE_NS
+            }
+            if (paired.size < RAW_RING_MIN_FRAMES) {
+                Log.d(TAG, "zsl ring: only ${paired.size}/${stamps.size} paired frames ready; falling back to burst")
+                drained.complete(null)
+                return@post
+            }
+            // Newest frame first (index 0 = reference at shutter press), then preceding frames newest-to-oldest.
+            val ordered = paired.takeLast(frames).reversed().toLongArray()
+            val black = FloatArray(4) { i -> staticBlack?.getOffsetForIndex(i % 2, i / 2)?.toFloat() ?: 64f }
+            val h = BurstNative.create(rawRingWidth, rawRingHeight, black, white)
+            rawRingPaused = true
+            val moved = BurstNative.ringDrainTo(ring, h, ordered)
+            val reference = moved.firstOrNull()?.let { rawRingResults[it] }
+            if (moved.size < RAW_RING_MIN_FRAMES || reference == null) {
+                BurstNative.destroy(h)
+                rawRingPaused = false
+                drained.complete(null)
+                return@post
+            }
+            val noise = noiseModel(reference)
+            BurstNative.setLevels(
+                h, reference.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.takeIf { it.size == 4 },
+                noise.first, noise.second,
+            )
+            for (i in moved.indices) {
+                rawRingResults[moved[i]]?.let { r -> gainOf(r)?.let { g -> BurstNative.setGain(h, i, g) } }
+            }
+            rawRingResults.clear()
+            if (!drained.complete(Drained(h, rawRingWidth, rawRingHeight, reference, moved.size))) {
+                BurstNative.destroy(h)
+                rawRingPaused = false
+            }
+        }
+        if (!posted) return null
+        val d = drained.await() ?: return null
+        onSubmitted()
+        try {
+            val merged = withContext(Dispatchers.Default) { BurstNative.finish(d.handle, d.width, d.height) }
+            val weights = BurstNative.frameWeights(d.handle)
+            Log.d(
+                TAG,
+                "zsl burst: ${weights.size + 1} of $frames frames (ring had ${d.count}), " +
+                    "${(System.nanoTime() - started) / 1_000_000} ms from shutter to merged, " +
+                    "frame weights ${weights.joinToString(" ") { "%.2f".format(it) }}, " +
+                    "noise ${noiseModel(d.reference).let { "${it.first} ${it.second}" }}",
+            )
+            val effective = 1f + weights.sum()
+            val description = "RawBoy merge=zsl frames=${weights.size + 1}/$frames effective=${"%.2f".format(java.util.Locale.ROOT, effective)} $note".trim()
+            DngCreator(inf.characteristics, d.reference).use { dng ->
+                dng.setOrientation(exifOrientation)
+                dng.setDescription(description)
+                location?.let(dng::setLocation)
+                dng.writeByteBuffer(out, Size(d.width, d.height), merged, 0)
+            }
+            return Still(
+                d.reference, null, effectiveFrames = effective,
+                compensationEv = shutterEv ?: appliedCompensationEv(_frames.value),
+                description = description, depth = null, dualPixel = null,
+            )
+        } finally {
+            BurstNative.destroy(d.handle)
+            handler.post { rawRingPaused = false }
+        }
     }
 
     /**
@@ -2040,6 +2237,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             streamingRaw = false
             while (parked.isNotEmpty()) parked.removeFirst().close()
             streamLevels = null
+            destroyRawRingOnHandler()
             pendingResult?.completeExceptionally(closed)
             pendingResult = null
             pendingImage?.completeExceptionally(closed)
@@ -2165,7 +2363,10 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             val before = info?.let(::compensationSteps)
             exposureBiasEv = ev
             // A slider drag sends every frame: restart the preview only when the camera's step changes.
-            if (info?.let(::compensationSteps) != before) runCatching { repeatPreview() }
+            if (info?.let(::compensationSteps) != before) {
+                clearRawRingOnHandler()
+                runCatching { repeatPreview() }
+            }
         }
     }
 
@@ -2317,6 +2518,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         /** A burst waits this long plus [BURST_FRAME_TIMEOUT_MS] per frame for its frames, then merges what came. */
         private const val BURST_TIMEOUT_MS = 2000L
         private const val BURST_FRAME_TIMEOUT_MS = 250L
+        /** Continuous RAW ring buffer (experimental ZSL burst): capacity, result history, minimum paired frames, max span. */
+        private const val RAW_RING_CAPACITY = 8
+        private const val RAW_RING_RESULT_LIMIT = 16
+        private const val RAW_RING_MIN_FRAMES = 2
+        private const val RAW_RING_MAX_AGE_NS = 1_500_000_000L
 
         /** A long exposure submits [LONG_EXPOSURE_CHUNK] requests whenever fewer than [LONG_EXPOSURE_QUEUE] are in flight. */
         /** The live preview's frame is this many times shorter than a still's (ISO higher to match), to leave the sensor to the stills. */

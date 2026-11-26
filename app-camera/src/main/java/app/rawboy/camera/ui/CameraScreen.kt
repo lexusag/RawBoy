@@ -1581,6 +1581,16 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                     indent = true,
                 )
             }
+            if (vm.rawViewfinderAvailable) {
+                SettingSwitch(
+                    title = "Continuous RAW ring buffer",
+                    subtitle = "Zero-shutter-lag frame stacking; uses ~200 MB more RAM and more battery",
+                    checked = settings.zslBurst,
+                    enabled = !recording,
+                    accent = EXPERIMENTAL_ORANGE,
+                    onChange = vm::setZslBurst,
+                )
+            }
             SettingSwitch(
                 title = "Save motion data with videos",
                 subtitle = "Whole 4:3 frame + a gyro file, to stabilize later",

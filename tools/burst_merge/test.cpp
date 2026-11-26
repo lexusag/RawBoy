@@ -242,6 +242,43 @@ int main() {
         flatScene = false;
     }
 
+    // 7. Continuous RAW ring buffer: wrap-around keeps the newest N frames, drainTo moves them into BurstMerger
+    //    (newest frame as reference) without copying, and leaves the ring empty.
+    {
+        rawboy::RawRingBuffer ring(N, W, H);
+        std::vector<uint16_t> latestRef;
+        // Push N + 3 frames so the ring wraps around 3 times; the very last frame has zero shift (reference).
+        for (int i = 0; i < N + 3; ++i) {
+            const bool isLast = i == N + 2;
+            const double sx = isLast ? 0 : shake(rng), sy = isLast ? 0 : shake(rng);
+            auto f = frame(sx, sy, nullptr, rng);
+            if (isLast) latestRef = f;
+            ring.push(reinterpret_cast<const uint8_t*>(f.data()), W * 2, 1000LL + i * 33LL);
+        }
+        const auto ts = ring.timestamps();
+        check(static_cast<int>(ts.size()) == N && ts.front() == 1000LL + 3 * 33LL && ts.back() == 1000LL + (N + 2) * 33LL,
+              "ring: keeps newest N timestamps in oldest-to-newest order");
+        // Drain newest-first so the shutter-moment frame is index 0 (the reference).
+        std::vector<int64_t> ordered(ts.rbegin(), ts.rend());
+        BurstMerger m(W, H, black, WHITE, NOISE_S, NOISE_O, /*levelsKnown=*/false);
+        const auto moved = ring.drainTo(m, ordered);
+        check(moved == ordered, "ring: drainTo moves all requested frames in order");
+        check(ring.timestamps().empty(), "ring: empty after drainTo");
+        m.setLevels(black, NOISE_S, NOISE_O);
+        for (size_t i = 0; i < moved.size(); ++i) m.setGain(static_cast<int>(i), 1.0);
+        const uint16_t* merged = m.finish();
+        std::vector<uint16_t> out(merged, merged + W * H);
+        const double flatRef = rmse(latestRef, nullptr, 40, 40, 560, 380);
+        const double flatOut = rmse(out, nullptr, 40, 40, 560, 380);
+        std::printf("ring: flat rmse %.2f -> %.2f DN (x%.2f), %zu frames\n", flatRef, flatOut, flatRef / flatOut, moved.size());
+        check(flatRef / flatOut > 1.8, "ring: drained merge lowers noise at least 1.8x");
+        // Pushing after drainTo works, and clear() empties the ring.
+        ring.push(reinterpret_cast<const uint8_t*>(latestRef.data()), W * 2, 9999LL);
+        check(ring.timestamps().size() == 1 && ring.timestamps()[0] == 9999LL, "ring: reusable after drainTo");
+        ring.clear();
+        check(ring.timestamps().empty(), "ring: empty after clear");
+    }
+
     std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
     return failures ? 1 : 0;
 }

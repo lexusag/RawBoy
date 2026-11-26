@@ -395,6 +395,72 @@ JNIEXPORT void JNICALL Java_app_rawboy_raw_BurstNative_destroy(JNIEnv*, jclass, 
     delete burstOf(handle);
 }
 
+// ---- Continuous RAW ring buffer (RawBoy Camera; BurstNative.kt) ----
+
+namespace {
+rawboy::RawRingBuffer* ringOf(jlong handle) { return reinterpret_cast<rawboy::RawRingBuffer*>(handle); }
+}  // namespace
+
+JNIEXPORT jlong JNICALL Java_app_rawboy_raw_BurstNative_ringCreate(JNIEnv* env, jclass, jint capacity, jint width,
+                                                                   jint height) {
+    if (capacity < 1 || width < 2 || height < 2) {
+        throwJava(env, "java/lang/IllegalArgumentException", "invalid ring geometry");
+        return 0;
+    }
+    return reinterpret_cast<jlong>(new rawboy::RawRingBuffer(capacity, width, height));
+}
+
+JNIEXPORT jboolean JNICALL Java_app_rawboy_raw_BurstNative_ringPush(JNIEnv* env, jclass, jlong handle, jobject plane,
+                                                                    jint width, jint height, jint rowStride,
+                                                                    jlong timestampNs) {
+    auto* ring = ringOf(handle);
+    if (!ring || width != ring->width() || height != ring->height()) return JNI_FALSE;
+    const auto* data = static_cast<const uint8_t*>(env->GetDirectBufferAddress(plane));
+    if (!data || rowStride < width * 2 ||
+        env->GetDirectBufferCapacity(plane) < static_cast<jlong>(rowStride) * (height - 1) + width * 2) {
+        throwJava(env, "java/lang/IllegalArgumentException", "invalid raw plane");
+        return JNI_FALSE;
+    }
+    return ring->push(data, rowStride, static_cast<int64_t>(timestampNs)) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jlongArray JNICALL Java_app_rawboy_raw_BurstNative_ringTimestamps(JNIEnv* env, jclass, jlong handle) {
+    const std::vector<int64_t> ts = ringOf(handle)->timestamps();
+    jlongArray out = env->NewLongArray(static_cast<jsize>(ts.size()));
+    if (!ts.empty()) {
+        std::vector<jlong> tmp(ts.begin(), ts.end());
+        env->SetLongArrayRegion(out, 0, static_cast<jsize>(tmp.size()), tmp.data());
+    }
+    return out;
+}
+
+JNIEXPORT jlongArray JNICALL Java_app_rawboy_raw_BurstNative_ringDrainTo(JNIEnv* env, jclass, jlong ringHandle,
+                                                                         jlong mergerHandle,
+                                                                         jlongArray orderedTimestamps) {
+    const jsize n = env->GetArrayLength(orderedTimestamps);
+    std::vector<int64_t> req(static_cast<size_t>(n));
+    if (n > 0) {
+        std::vector<jlong> tmp(static_cast<size_t>(n));
+        env->GetLongArrayRegion(orderedTimestamps, 0, n, tmp.data());
+        for (jsize i = 0; i < n; ++i) req[static_cast<size_t>(i)] = static_cast<int64_t>(tmp[static_cast<size_t>(i)]);
+    }
+    const std::vector<int64_t> moved = ringOf(ringHandle)->drainTo(*burstOf(mergerHandle), req);
+    jlongArray out = env->NewLongArray(static_cast<jsize>(moved.size()));
+    if (!moved.empty()) {
+        std::vector<jlong> tmp(moved.begin(), moved.end());
+        env->SetLongArrayRegion(out, 0, static_cast<jsize>(tmp.size()), tmp.data());
+    }
+    return out;
+}
+
+JNIEXPORT void JNICALL Java_app_rawboy_raw_BurstNative_ringClear(JNIEnv*, jclass, jlong handle) {
+    ringOf(handle)->clear();
+}
+
+JNIEXPORT void JNICALL Java_app_rawboy_raw_BurstNative_ringDestroy(JNIEnv*, jclass, jlong handle) {
+    delete ringOf(handle);
+}
+
 }  // extern "C"
 
 // ---- Long exposure stack (RawBoy Camera; LongExposureNative.kt) ----

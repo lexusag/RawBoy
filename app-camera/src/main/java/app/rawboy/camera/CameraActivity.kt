@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
+import android.content.ComponentCallbacks2
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -336,6 +337,11 @@ class CameraActivity : ComponentActivity() {
         orientation.disable()
         viewModel.onPause()
         super.onPause()
+    }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) viewModel.onLowMemory()
     }
 
     /**

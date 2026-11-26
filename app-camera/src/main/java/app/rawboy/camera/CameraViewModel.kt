@@ -154,6 +154,26 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun rawViewfinderOn(s: CameraSettings) = s.rawViewfinder && platform.preview.rawViewfinder
 
+    /**
+     * Whether the experimental continuous RAW ring buffer should be streaming right now: gated on the phone profile's
+     * RAW streaming support, not in video / flash / max-res / long-exposure, and in AUTO only while the scene is dark.
+     */
+    private fun zslBurstOn(s: CameraSettings, lowLightNow: Boolean = lowLight.value): Boolean {
+        val e = s.effective
+        return platform.preview.rawViewfinder && e.zslBurst && !_videoMode.value &&
+            e.burstMode.merges(lowLightNow) && e.flash == FlashMode.OFF && !e.maxRes &&
+            !(e.experimental && e.longExposure > 0)
+    }
+
+    private fun syncRawRing(lowLightNow: Boolean = lowLight.value) {
+        controller.setRawRing(zslBurstOn(_settings.value, lowLightNow))
+    }
+
+    /** Releases buffered ZSL ring frames under Android memory pressure; next shot falls back to a normal burst. */
+    fun onLowMemory() {
+        controller.clearRawRing()
+    }
+
     /** The depth stream the controller should add to stills: the chosen source while Save depth map is on. */
     private fun depthStream(s: CameraSettings): DepthSource? = s.effective.takeIf { it.saveDepth }?.depthSource
 
@@ -406,6 +426,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         controller.setExposureBias(exposureBias(current)) // flat video raises it
         if (!on) setExposureLock(false) // the lock is video mode's: photos meter as always
         applyStabilization()
+        syncRawRing()
         republish() // the video viewfinder drops the colour denoise (see publish)
     }
 
@@ -762,8 +783,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         ShotSaver.attachView()
         controller.rawFrames = rawFrames
         controller.setRawViewfinder(rawViewfinderOn(_settings.value))
+        syncRawRing()
         val maxRes = _settings.value.maxRes
         lensPrefetch = viewModelScope.async(Dispatchers.Default) { discoverLenses(maxRes) }
+        viewModelScope.launch(Dispatchers.Main.immediate) {
+            lowLight.collect { syncRawRing(it) }
+        }
         viewModelScope.launch(Dispatchers.Main.immediate) {
             ShotSaver.calibrations.collect { cal ->
                 _settings.value = when (cal) {
@@ -1470,6 +1495,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
     }
 
+    /** Experimental continuous RAW ring buffer (zero-shutter-lag burst stacking) on or off. */
+    fun setZslBurst(on: Boolean) {
+        if (_recordingMs.value != null) return
+        change { it.copy(zslBurst = on) }
+        syncRawRing()
+        if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+    }
+
     fun setGrain(on: Boolean) {
         change { it.copy(grain = on) }
     }
@@ -1554,8 +1587,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             controller.setCaptureDepth(depthStream(next))
             if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
         }
-        if (prev.rawViewfinder != next.rawViewfinder && !recording) {
+        if ((prev.rawViewfinder != next.rawViewfinder || prev.zslBurst != next.zslBurst) && !recording) {
             controller.setRawViewfinder(rawViewfinderOn(next))
+            syncRawRing()
             if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
         }
     }
@@ -1565,6 +1599,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _settings.value = s
         Strings.choose(s.language)
         controller.setExposureBias(exposureBias(s.effective))
+        syncRawRing()
         // A slider drag changes settings every frame: save once it rests.
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
@@ -1655,6 +1690,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val burstFrames = if (hiRes || screenFlash || longExposure != null) 1 else settings.burstFrames(lowLight.value)
         // A long exposure holds the shutter like a merging burst does (the stack and its DNG write).
         val burst = (burstFrames > 1 || longExposure != null) && flash == FlashMode.OFF
+        val preferRing = zslBurstOn(settings, lowLight.value) && burstFrames > 1 && flash == FlashMode.OFF && !screenFlash && !hiRes && longExposure == null
         // Debug note for the saved files' ImageDescription (CameraController.captureDng adds the frames actually merged).
         val mergeNote = "mode=${settings.burstMode.name.lowercase()} lowLight=${if (lowLight.value) 1 else 0}" +
             when {
@@ -1668,7 +1704,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         // A long exposure's raw is lifted away from what the viewfinder predicted for a still: it must not calibrate the preview.
         // The raw viewfinder needs no preview calibration (its learned scale would mean nothing for the ISP's preview).
-        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null && _frame.value?.raw != true) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
+        // A ZSL ring shot comes from TEMPLATE_PREVIEW frames, not TEMPLATE_STILL_CAPTURE, so don't calibrate previewScale from it.
+        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null && !preferRing && _frame.value?.raw != true) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
             Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +
@@ -1706,7 +1743,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     delay(SCREEN_FLASH_SETTLE_MS)
                 }
                 val pureRawThumb = if (settings.pureRaw) live?.let { viewfinderThumbnail(it.base.base, it.auto.exposure) } else null
-                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash, mergeNote, longExposure)
+                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, preferRing, screenFlash, mergeNote, longExposure)
                     .copy(mayHaveFace = mayHaveFace, pureRawThumbnail = pureRawThumb)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
@@ -1748,7 +1785,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, screenFlash: Boolean = false, mergeNote: String = "", longExposure: app.rawboy.camera.capture.LongExposure? = null): Shot {
+    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, preferRing: Boolean = false, screenFlash: Boolean = false, mergeNote: String = "", longExposure: app.rawboy.camera.capture.LongExposure? = null): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -1772,7 +1809,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val result = try {
                     withContext(Dispatchers.IO) {
                         val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                        val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
+                        val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, preferRing, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
                         fix?.let { addGps(uri, it) }
                         if (!dngPending) MediaStoreOutput.publish(resolver, uri)
                         result
@@ -1787,7 +1824,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val file = File(app.cacheDir, "$baseName-$shotId.dng")
                 val result = try {
                     withContext(Dispatchers.IO) {
-                        val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
+                        val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, preferRing, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
                         fix?.let { addGps(Uri.fromFile(file), it) }
                         result
                     }
