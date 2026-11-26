@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreMotion
 import Foundation
+import ImageIO
 import os
 import Photos
 import RawBoyEngine
@@ -575,6 +576,8 @@ final class CameraViewModel: ObservableObject {
     func setWarmth(_ v: Float) { change { $0.warmth = v } }
     func setJpegQuality(_ q: Int) { change { $0.jpegQuality = min(max(q, CameraSettings.minQuality), 100) } }
     func setKeepDng(_ keep: Bool) { change { $0.keepDng = keep } }
+    func setRawWithJpeg(_ on: Bool) { change { $0.rawWithJpeg = on } }
+    func setRawPreview(_ preview: RawPreview) { change { $0.rawPreview = preview } }
     func setSmallExport(_ on: Bool) { change { $0.smallExport = on } }
     func setRememberLast(_ on: Bool) { change { $0.rememberLast = on } }
     func setShutterSound(_ on: Bool) { change { $0.shutterSound = on } }
@@ -1019,21 +1022,35 @@ final class CameraViewModel: ObservableObject {
         }
     }
 
-    /** Raw -> auto develop + look -> JPEG (jpegli), as RawBoy Auto develops a photo. */
+    /** Raw -> auto develop + look -> JPEG / DNG with embedded preview, or Pure RAW directly to Photos. */
     private func develop(_ shot: Shot) async throws {
         let s = shot.settings
-        let look = s.look
         let started = Date()
+        var bgTask = UIBackgroundTaskIdentifier.invalid
+        bgTask = UIApplication.shared.beginBackgroundTask(withName: "RawBoy photo") {
+            UIApplication.shared.endBackgroundTask(bgTask)
+        }
+        defer { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) } }
+
         let tempDir = FileManager.default.temporaryDirectory
         let dngURL = tempDir.appendingPathComponent(shot.name + ".dng")
-        try shot.dng.write(to: dngURL)
-        defer { if !s.keepDng { try? FileManager.default.removeItem(at: dngURL) } }
+        defer { try? FileManager.default.removeItem(at: dngURL) }
+
+        if s.pureRaw {
+            // Pure RAW: no standalone JPEG and no embedded preview -> bypass decode, analysis and GPU develop.
+            try shot.dng.write(to: dngURL)
+            try await PhotoLibraryOutput.save(dngURL, naming: Self.rawNaming)
+            Self.log.notice("saved pure RAW \(shot.name) in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            return
+        }
+
+        let look = s.look
         // LUT first, on the main actor (it's cached there).
         let preliminary = LookApplier.apply(DevelopParams(), look: look, strength: s.strength, adjust: .none, hasFace: false)
         let lut = try await preliminary.lut.asyncMap { try await loadLut($0) }
         let film = try await preliminary.film.asyncMap { try await loadFilm($0) }
         let gpu = exportGpu
-        let (jpeg, rawKey) = try await withCheckedThrowingContinuation { (c: CheckedContinuation<(URL, Float), Error>) in
+        let outcome = try await withCheckedThrowingContinuation { (c: CheckedContinuation<(jpeg: URL?, preview: Data?, dng: Data?, rawKey: Float), Error>) in
             developQueue.async {
                 do {
                     let decodeStart = Date()
@@ -1055,7 +1072,7 @@ final class CameraViewModel: ObservableObject {
                     params.colorDenoise = max(Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise) ?? params.denoise,
                                               params.colorDenoise ?? 0)
                     params.shadows = max(params.shadows, Self.backlightShadows(a.stats))
-                    // Random light leak: one generated leak on saved JPEGs, as on Android (the DNG and viewfinder don't get it).
+                    // Random light leak: one generated leak on saved JPEGs/previews, as on Android (the DNG raw stays clean).
                     if s.randomLightLeak, CameraSettingsStore.nextLightLeak(rate: s.randomLightLeakRate) {
                         let aspect = Float(a.base.width) / Float(max(a.base.height, 1))
                         params.filmLeaks = [FilmLeaks.randomForCamera(aspect: aspect, seed: FilmLeaks.newSeed(),
@@ -1095,24 +1112,88 @@ final class CameraViewModel: ObservableObject {
                                                 dateStampStyle: s.dateStampStyle,
                                                 pentax645: pentax645,
                                                 monochromeImprint: s.monoMode)
+                    let previewMaxLongSide = s.rawPreview.maxLongSide
+                    var previewSettings = export
+                    previewSettings.jpegQuality = CameraSettings.rawPreviewQuality
+                    previewSettings.maxLongSide = previewMaxLongSide
+
                     let exportStart = Date()
-                    let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
-                                                     naming: Self.jpegNaming, gpu: gpu)
+                    var jpegURL: URL?
+                    var previewData: Data?
+                    if s.saveJpeg {
+                        let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
+                                                         naming: Self.jpegNaming, gpu: gpu)
+                        jpegURL = file
+                        if s.embedDngPreview {
+                            let jpegSmallerThanPreview = s.maxLongSide != nil && previewMaxLongSide != nil && previewMaxLongSide! > s.maxLongSide!
+                            if jpegSmallerThanPreview {
+                                previewData = try Exporter().exportJpegData(img, params: shader, settings: previewSettings, gpu: gpu)
+                            } else {
+                                previewData = Self.makePreviewJpeg(from: file, maxLongSide: previewMaxLongSide, quality: CameraSettings.rawPreviewQuality)
+                            }
+                        }
+                    } else if s.embedDngPreview {
+                        previewData = try Exporter().exportJpegData(img, params: shader, settings: previewSettings, gpu: gpu)
+                    }
                     Self.log.notice("\(shot.name): decode \(decodeMs) ms, develop + JPEG \(Int(Date().timeIntervalSince(exportStart) * 1000)) ms")
-                    c.resume(returning: (file, a.stats.key))
+
+                    var dngData: Data?
+                    if s.keepDng {
+                        if let previewData {
+                            let embedStart = Date()
+                            do {
+                                dngData = try DngPreview.embed(previewData, in: shot.dng) ?? shot.dng
+                                Self.log.notice("\(shot.name): embedded DNG preview (\(previewData.count / 1024) KB) in \(Int(Date().timeIntervalSince(embedStart) * 1000)) ms")
+                            } catch {
+                                Self.log.error("\(shot.name): DNG preview embed failed: \(error.localizedDescription)")
+                                dngData = shot.dng
+                            }
+                        } else {
+                            dngData = shot.dng
+                        }
+                    }
+                    c.resume(returning: (jpegURL, previewData, dngData, a.stats.key))
                 } catch {
                     c.resume(throwing: error)
                 }
             }
         }
-        lastShot = UIImage(contentsOfFile: jpeg.path)?.preparingThumbnail(of: CGSize(width: 160, height: 160))
-        #if DEBUG
-        DebugSnapshots.save(shot.name, jpeg: jpeg, viewfinder: shot.viewfinder, dng: shot.dng)
-        #endif
-        try await PhotoLibraryOutput.save(jpeg, naming: Self.jpegNaming)
-        if s.keepDng { try await PhotoLibraryOutput.save(dngURL, naming: Self.rawNaming) }
+        if let jpeg = outcome.jpeg {
+            lastShot = UIImage(contentsOfFile: jpeg.path)?.preparingThumbnail(of: CGSize(width: 160, height: 160))
+            #if DEBUG
+            DebugSnapshots.save(shot.name, jpeg: jpeg, viewfinder: shot.viewfinder, dng: outcome.dng ?? shot.dng)
+            #endif
+            try await PhotoLibraryOutput.save(jpeg, naming: Self.jpegNaming)
+        } else if let preview = outcome.preview {
+            lastShot = UIImage(data: preview)?.preparingThumbnail(of: CGSize(width: 160, height: 160))
+        }
+        if let dngData = outcome.dng {
+            try dngData.write(to: dngURL)
+            try await PhotoLibraryOutput.save(dngURL, naming: Self.rawNaming)
+        }
         Self.log.notice("saved \(shot.name) in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
-        if let key = shot.viewfinderKey { calibrate(rawKey: rawKey, viewfinderKey: key, lens: s.lensKey, scaleAtShutter: s.previewScale) }
+        if let key = shot.viewfinderKey { calibrate(rawKey: outcome.rawKey, viewfinderKey: key, lens: s.lensKey, scaleAtShutter: s.previewScale) }
+    }
+
+    /** Downscales (if needed) and re-encodes the saved JPEG at [quality] for embedding as a DNG preview. */
+    private nonisolated static func makePreviewJpeg(from jpegURL: URL, maxLongSide: Int?, quality: Int) -> Data? {
+        guard let src = CGImageSourceCreateWithURL(jpegURL as CFURL, nil) else { return nil }
+        let cgImage: CGImage?
+        if let maxLongSide {
+            let opts: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: maxLongSide,
+            ]
+            cgImage = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
+        } else {
+            cgImage = CGImageSourceCreateImageAtIndex(src, 0, nil)
+        }
+        guard let cgImage else { return nil }
+        let out = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(out as CFMutableData, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, cgImage, [kCGImageDestinationLossyCompressionQuality: Double(quality) / 100] as CFDictionary)
+        return CGImageDestinationFinalize(dest) ? out as Data : nil
     }
 
     /**

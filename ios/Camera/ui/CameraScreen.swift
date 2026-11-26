@@ -758,8 +758,20 @@ private struct SettingsSheet: View {
                     slider("Look strength", value: Double(vm.settings.strength), range: 0...100) { vm.setStrength(Float($0)) }
                     row("Smaller photos", "\(CameraSettings.smallLongSide) px long side; off saves full size",
                         Binding(get: { vm.settings.smallExport }, set: vm.setSmallExport))
-                    row("Keep raw (DNG)", "Saved to Photos › RawBoy Camera RAW",
+                    row("Keep raw (DNG)",
+                        vm.settings.rawWithJpeg
+                            ? "Saved to Photos › RawBoy Camera RAW (with JPEG)"
+                            : "RAW only, saved to Photos › RawBoy Camera RAW",
                         Binding(get: { vm.settings.keepDng }, set: vm.setKeepDng))
+                    if vm.settings.keepDng {
+                        row("Also save JPEG", "Save a developed JPEG alongside each DNG",
+                            Binding(get: { vm.settings.rawWithJpeg }, set: vm.setRawWithJpeg))
+                        Picker("Embedded preview", selection: Binding(get: { vm.settings.rawPreview }, set: vm.setRawPreview)) {
+                            Text("3000 px (Q85)").tag(RawPreview.p3000)
+                            Text("12 MP (Q85)").tag(RawPreview.mp12)
+                            Text("Pure RAW (off)").tag(RawPreview.none)
+                        }
+                    }
                     Picker("Raw format", selection: Binding(get: { vm.settings.rawFormat }, set: vm.setRawFormat)) {
                         Text("ProRAW: cleaner in low light").tag(RawFormat.proRaw)
                         Text("RAW: single exposure").tag(RawFormat.bayer)

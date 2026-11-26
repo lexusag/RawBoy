@@ -443,15 +443,26 @@ JNIEXPORT void JNICALL Java_app_rawboy_raw_LongExposureNative_destroy(JNIEnv*, j
 
 }  // extern "C"
 
-// ---- Lossy JPEG XL DNG (RawBoy Camera; DngJxlNative.kt) ----
+// ---- Lossy JPEG XL & preview DNG rewrite (RawBoy Camera; DngJxlNative.kt) ----
 
-// Re-saves the DNG behind fd (read and write access) as a lossy JPEG XL DNG, in place; the file is only touched once
-// the new one is complete. Returns 0 done, 1 left as it was (not a 2x2 mosaic, or already lossy), 2 build without
-// the DNG SDK; throws IOException on failure.
-extern "C" JNIEXPORT jint JNICALL Java_app_rawboy_raw_DngJxlNative_transcodeNative(JNIEnv* env, jclass, jint fd,
-                                                                            jfloat distance, jint effort) {
+// Re-saves the DNG behind fd (read and write access), optionally compressing as lossy JPEG XL and/or embedding an
+// upright sRGB JPEG preview. The file is only touched once the new one is complete.
+// Returns 0 done, 1 left as it was (neither compression nor preview applied), 2 build without the DNG SDK;
+// throws IOException on failure.
+extern "C" JNIEXPORT jint JNICALL Java_app_rawboy_raw_DngJxlNative_rewriteNative(JNIEnv* env, jclass, jint fd,
+                                                                                 jboolean lossyJxl, jfloat distance,
+                                                                                 jint effort, jbyteArray previewJpeg) {
 #if RAWBOY_WITH_DNG_SDK
     try {
+        std::vector<uint8_t> preview;
+        if (previewJpeg != nullptr) {
+            const jsize n = env->GetArrayLength(previewJpeg);
+            if (n > 0) {
+                preview.resize(static_cast<size_t>(n));
+                env->GetByteArrayRegion(previewJpeg, 0, n, reinterpret_cast<jbyte*>(preview.data()));
+                if (env->ExceptionCheck()) return 0;
+            }
+        }
         std::string error;
         std::vector<uint8_t> result;
         {
@@ -460,7 +471,9 @@ extern "C" JNIEXPORT jint JNICALL Java_app_rawboy_raw_DngJxlNative_transcodeNati
                 throwJava(env, "java/io/IOException", error);
                 return 0;
             }
-            const auto r = rawboy::transcodeToLossyJxlDng(data.data(), data.size(), distance, effort, result, error);
+            const auto r = rawboy::rewriteDng(data.data(), data.size(), lossyJxl != JNI_FALSE, distance, effort,
+                                              preview.empty() ? nullptr : preview.data(), preview.size(), result,
+                                              error);
             if (r == rawboy::TranscodeResult::NotApplicable) return 1;
             if (r == rawboy::TranscodeResult::Failed) {
                 throwJava(env, "java/io/IOException", error);
@@ -482,13 +495,18 @@ extern "C" JNIEXPORT jint JNICALL Java_app_rawboy_raw_DngJxlNative_transcodeNati
         }
         return 0;
     } catch (const std::bad_alloc&) {
-        throwJava(env, "java/lang/OutOfMemoryError", "Not enough memory to compress this DNG");
+        throwJava(env, "java/lang/OutOfMemoryError", "Not enough memory to rewrite this DNG");
     } catch (const std::exception& e) {
         throwJava(env, "java/io/IOException", e.what());
     }
     return 0;
 #else
-    (void)env; (void)fd; (void)distance; (void)effort;
+    (void)env; (void)fd; (void)lossyJxl; (void)distance; (void)effort; (void)previewJpeg;
     return 2;
 #endif
+}
+
+extern "C" JNIEXPORT jint JNICALL Java_app_rawboy_raw_DngJxlNative_transcodeNative(JNIEnv* env, jclass cls, jint fd,
+                                                                                   jfloat distance, jint effort) {
+    return Java_app_rawboy_raw_DngJxlNative_rewriteNative(env, cls, fd, JNI_TRUE, distance, effort, nullptr);
 }

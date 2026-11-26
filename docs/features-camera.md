@@ -22,7 +22,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Feature | Since | Android | iOS | Notes |
 |---|---|---|---|---|
 | Live viewfinder developed with Auto's pipeline and a look | ≤1.1.1 | ✓ | ✓ | Same shader as Pro and Auto; the viewfinder is calibrated against the raw after each shot |
-| Raw capture (DNG) next to the JPEG | ≤1.1.1 | ✓ Camera2 `RAW_SENSOR` | ✓ ProRAW (Bayer as a setting) | RAW off by default since 1.1.6 |
+| Raw capture (DNG): RAW only by default, optional **Also save JPEG**, **Embedded preview** (`3000 px` / `12 MP` @ Q85 via Adobe DNG SDK) or **Pure RAW** | ≤1.1.1; RAW-only + preview unreleased | ✓ Camera2 `RAW_SENSOR` | ✓ ProRAW (Bayer as a setting) | RAW off by default since 1.1.6; when on, saves DNG only with a 3000 px Q85 processed preview by default (optional 12 MP @ Q85, or Pure RAW skipping develop) |
 | Lenses UW / W / T, selfie | ≤1.1.1 | ✓ | ✓ one physical lens at a time | |
 | Full-resolution raw (50 MP / 48 MP) | 1.5.7 | ✓ | ? | Android remosaics Quad-Bayer into a standard DNG (`MaxResDngWriter`); iOS follows the system 48 MP option |
 | **Merge 8 frames** (burst, align + merge, On / Auto / Off) | ≤1.1.1 | ✓ | — | HDR+-style merge in C++ (`burst_merge.*`); iOS relies on ProRAW's own merge. Frame merging Auto by default 1.5.7; written into the photo's description 1.10.6 |

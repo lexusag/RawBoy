@@ -48,8 +48,12 @@ data class CameraSettings(
     val filter: BwFilter = BwFilter.YELLOW,
     /** JPEG quality, [MIN_QUALITY]..100. */
     val jpegQuality: Int = 95,
-    /** Keep the raw as DNG in Pictures/<Edition.FOLDER>/RAW. */
+    /** Save the raw as DNG in Pictures/<Edition.FOLDER>/RAW (RAW only by default unless [rawWithJpeg] is on). */
     val keepDng: Boolean = false,
+    /** When [keepDng] is on, also save a standalone developed JPEG alongside the DNG. */
+    val rawWithJpeg: Boolean = false,
+    /** Embedded processed JPEG preview written into saved DNGs (3000 px @ Q85 by default, 12 MP @ Q85, or Pure RAW). */
+    val rawPreview: RawPreview = RawPreview.P3000,
     /** Save the kept raw as a lossy JPEG XL DNG (a fraction of the size) instead of an uncompressed one. */
     val lossyDng: Boolean = false,
     /** Save photos at [SMALL_LONG_SIDE] px on the long side instead of full size. */
@@ -327,6 +331,15 @@ data class CameraSettings(
         showZoomControl = false,
     )
 
+    /** Save a standalone developed JPEG (always on when RAW is off; optional when RAW is on). */
+    val saveJpeg: Boolean get() = !keepDng || rawWithJpeg
+
+    /** Embed a processed JPEG preview inside the saved DNG. */
+    val embedDngPreview: Boolean get() = keepDng && rawPreview != RawPreview.NONE
+
+    /** Pure RAW: save only the DNG with no embedded processed preview, bypassing develop entirely. */
+    val pureRaw: Boolean get() = keepDng && !rawWithJpeg && rawPreview == RawPreview.NONE
+
     /** Resets all user settings to their defaults while keeping learned lens calibration. */
     fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides, language = language)
 
@@ -344,6 +357,9 @@ data class CameraSettings(
         val LIGHT_LEAK_RATES = listOf(1, 2, 3, 4, 5)
 
         const val MIN_QUALITY = 70
+
+        /** JPEG quality for the processed preview embedded inside saved DNGs. */
+        const val RAW_PREVIEW_QUALITY = 85
 
         const val SMALL_LONG_SIDE = 3000
         /** Light sharpening after the downscale to [SMALL_LONG_SIDE] (luma unsharp mask, `band_ops.h`); full size gets none. */
@@ -400,6 +416,8 @@ object CameraSettingsStore {
         val always = CameraSettings(
             jpegQuality = p.getInt("jpegQuality", d.jpegQuality).coerceIn(CameraSettings.MIN_QUALITY, 100),
             keepDng = p.getBoolean("keepDng", d.keepDng),
+            rawWithJpeg = p.getBoolean("rawWithJpeg", d.rawWithJpeg),
+            rawPreview = runCatching { RawPreview.valueOf(p.getString("rawPreview", null)!!) }.getOrDefault(d.rawPreview),
             lossyDng = p.getBoolean("lossyDng", d.lossyDng),
             smallExport = p.getBoolean("smallExport", d.smallExport),
             maxRes = p.getBoolean("maxRes", d.maxRes),
@@ -498,6 +516,8 @@ object CameraSettingsStore {
             .putString("filter", s.filter.key)
             .putInt("jpegQuality", s.jpegQuality)
             .putBoolean("keepDng", s.keepDng)
+            .putBoolean("rawWithJpeg", s.rawWithJpeg)
+            .putString("rawPreview", s.rawPreview.name)
             .putBoolean("lossyDng", s.lossyDng)
             .putBoolean("smallExport", s.smallExport)
             .putBoolean("maxRes", s.maxRes)
@@ -753,5 +773,15 @@ object LightLeakSequence {
         }
         return String(slots)
     }
+}
+
+/** Embedded processed JPEG preview written into saved DNG files (Adobe DNG SDK). */
+enum class RawPreview(val label: String, val maxLongSide: Int?) {
+    /** 3000 px long-side processed JPEG at quality 85 (default). */
+    P3000("3000 px", 3000),
+    /** 12 MP (4000 px long-side cap) processed JPEG at quality 85. */
+    MP12("12 MP", 4000),
+    /** Pure RAW: no embedded processed preview; skips develop when [CameraSettings.rawWithJpeg] is off. */
+    NONE("Pure RAW", null),
 }
 

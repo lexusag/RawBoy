@@ -91,8 +91,10 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "%s px по довшій стороні; вимкнено: повний розмір",
     "%s MP" to
         "%s Мп",
-    "Saved to Pictures/%s/RAW" to
-        "Зберігається в Pictures/%s/RAW",
+    "Saved to Pictures/%s/RAW (with JPEG)" to
+        "Зберігається в Pictures/%s/RAW (разом із JPEG)",
+    "RAW only, saved to Pictures/%s/RAW" to
+        "Лише RAW, зберігається в Pictures/%s/RAW",
     "%s random out of every %s shots" to
         "%s випадкових з кожних %s знімків",
     "Frames" to
@@ -167,6 +169,24 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Повний розмір сенсора: повільніше, без об’єднання, видошукач зупиняється",
     "Keep raw (DNG)" to
         "Зберігати RAW (DNG)",
+    "Also save JPEG" to
+        "Також зберігати JPEG",
+    "Save a developed JPEG alongside each DNG" to
+        "Зберігати проявлений JPEG поруч із кожним DNG",
+    "Embedded preview" to
+        "Вбудоване прев’ю",
+    "3000 px processed JPEG (quality 85) inside the DNG" to
+        "Оброблений JPEG 3000 px (якість 85) усередині DNG",
+    "12 MP processed JPEG (quality 85) inside the DNG" to
+        "Оброблений JPEG 12 Мп (якість 85) усередині DNG",
+    "Pure RAW: no embedded preview; skips develop when JPEG is off" to
+        "Чистий RAW: без вбудованого прев’ю; пропускає проявлення, коли JPEG вимкнено",
+    "3000 px" to
+        "3000 px",
+    "12 MP" to
+        "12 Мп",
+    "Pure RAW" to
+        "Чистий RAW",
     "Lossy JPEG XL DNG" to
         "DNG зі стисненням JPEG XL",
     "Much smaller, visually lossless; saving takes longer" to
@@ -469,8 +489,8 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Перемикач ФОТО і ВІДЕО над затвором або проведіть убік по області затвора (ліворуч — відео). Перемикає на відео: затвор стає червоною кнопкою запису, а картинка записується зі стилем, 1080p, 30 к/с, зі стереозвуком, у Movies/RawBoy Camera. Затемнені смуги показують, що відео 16:9 прибирає з видошукача. Під час запису не можна змінити об’єктив і камеру; вихід із застосунку зупиняє запис. AE ФІКС. (угорі праворуч) утримує експозицію, а дотик до картинки фіксує фокус, кожне окремо. Налаштування › Якість відео: низька, оптимальна або висока. Налаштування › Пласке відео для кольорокорекції записує без стилю, щоб обробити пізніше. Налаштування › Оптична стабілізація використовує лише стабілізатор об’єктива. Перші записи на телефоні можуть починатися із затримкою, поки камера шукає спосіб запису; на деяких телефонах видошукач один раз перезапускається і просить знову натиснути запис.",
     "RAW" to
         "RAW",
-    "Keep the DNG next to the JPEG (lit) or not (struck through)." to
-        "Зберігати DNG поруч із JPEG (світиться) чи ні (закреслено).",
+    "Save raw DNG only by default (lit), with a processed JPEG preview embedded inside the DNG (3000 px at quality 85 by default; 12 MP or Pure RAW in Settings). Enable Settings › Also save JPEG to save a standalone JPEG alongside the DNG. Struck through: JPEG only." to
+        "Типово зберігає лише RAW DNG (світиться) із вбудованим обробленим JPEG-прев’ю всередині DNG (типово 3000 px, якість 85; у налаштуваннях можна обрати 12 Мп або Чистий RAW). Увімкніть Налаштування › Також зберігати JPEG, щоб зберігати окремий JPEG поруч із DNG. Закреслено: лише JPEG.",
     "Enable or disable photo frames (restoring the last frame chosen in Settings, or Pentax 645 by default). Lit when a frame is active." to
         "Вмикає або вимикає рамки фото (повертає останню рамку з налаштувань, типово Pentax 645). Світиться, коли рамка активна.",
     "Burst (stacked frames)" to

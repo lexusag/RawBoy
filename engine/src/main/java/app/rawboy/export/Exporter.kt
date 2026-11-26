@@ -118,6 +118,48 @@ class Exporter(private val context: Context) {
         }
     }
 
+    /**
+     * Develops [image] with [params] as a plain sRGB JPEG (jpegli, no EXIF/gain map) into a [ByteArray], without
+     * creating a MediaStore entry. Used to build the embedded preview JPEG for DNG files.
+     */
+    fun exportJpegBytes(
+        image: RawImage,
+        params: ShaderParams,
+        settings: ExportSettings,
+        gpu: ExportGpu? = null,
+        onProgress: (Float) -> Unit = {},
+    ): ByteArray {
+        this.gpu = gpu
+        scan = settings.filmScan && ScanScale.applies(params)
+        val size = if (scan) ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
+        else BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide)
+        val isMono = params.saturation <= -100f || (params.lutAmount >= 100f && app.rawboy.auto.looks.Looks.isMonochromeLut(params.lut?.id))
+        val resolved = settings.resolveFrame(image, exifDate = settings.captureDate, monochrome = isMono)
+        val dateStamp = if (resolved.pentax645 == null) resolved.dateStamp else ""
+        val tmp = java.io.File.createTempFile("rb-preview-", ".jpg", context.cacheDir)
+        try {
+            ParcelFileDescriptor.open(
+                tmp,
+                ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE,
+            ).use { pfd ->
+                val handle = JpegNative.begin(pfd.fd, size.first, size.second, resolved.jpegQuality)
+                try {
+                    renderOutput(
+                        image, params, size, resolved.downscaleSharpen,
+                        dateStamp, resolved.dateStampStyle, resolved.pentax645, resolved.monochromeImprint, onProgress,
+                    ) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
+                } catch (t: Throwable) {
+                    JpegNative.abort(handle)
+                    throw t
+                }
+                JpegNative.finish(handle)
+            }
+            return tmp.readBytes()
+        } finally {
+            tmp.delete()
+        }
+    }
+
     private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, outSize: Pair<Int, Int>, quality: Int, sharpen: Float, dateStamp: String, dateStampStyle: DateStampStyle, pentax645: Pentax645Info?, monochrome: Boolean, onProgress: (Float) -> Unit) {
         val w = outSize.first
         val bitmap = Bitmap.createBitmap(w, outSize.second, Bitmap.Config.ARGB_8888)

@@ -1,5 +1,6 @@
 package app.rawboy.camera.ui
 
+import app.rawboy.camera.RawPreview
 import app.rawboy.camera.i18n.AppLanguage
 import app.rawboy.camera.i18n.tr
 import androidx.compose.material3.OutlinedButton
@@ -1367,11 +1368,35 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             }
             SettingSwitch(
                 title = "Keep raw (DNG)",
-                subtitle = tr("Saved to Pictures/%s/RAW", Edition.FOLDER),
+                subtitle = if (settings.rawWithJpeg) {
+                    tr("Saved to Pictures/%s/RAW (with JPEG)", Edition.FOLDER)
+                } else {
+                    tr("RAW only, saved to Pictures/%s/RAW", Edition.FOLDER)
+                },
                 checked = settings.keepDng,
                 onChange = vm::setKeepDng,
             )
             if (settings.keepDng) {
+                SettingSwitch(
+                    title = "Also save JPEG",
+                    subtitle = "Save a developed JPEG alongside each DNG",
+                    checked = settings.rawWithJpeg,
+                    onChange = vm::setRawWithJpeg,
+                    indent = true,
+                )
+                SettingChoice(
+                    title = "Embedded preview",
+                    subtitle = when (settings.rawPreview) {
+                        RawPreview.P3000 -> "3000 px processed JPEG (quality 85) inside the DNG"
+                        RawPreview.MP12 -> "12 MP processed JPEG (quality 85) inside the DNG"
+                        RawPreview.NONE -> "Pure RAW: no embedded preview; skips develop when JPEG is off"
+                    },
+                    options = RawPreview.entries,
+                    selected = settings.rawPreview,
+                    label = { it.label },
+                    onSelect = vm::setRawPreview,
+                    indent = true,
+                )
                 SettingSwitch(
                     title = "Lossy JPEG XL DNG",
                     subtitle = "Much smaller, visually lossless; saving takes longer",

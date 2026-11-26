@@ -103,6 +103,28 @@ public final class Exporter {
     }
 
     /**
+     * Develops [image] with [params] as a plain sRGB JPEG (jpegli, no EXIF) into [Data], without saving to Photos.
+     * Used to build the embedded preview JPEG for DNG files.
+     */
+    public func exportJpegData(_ image: RawImage, params: ShaderParams, settings: ExportSettings,
+                               gpu: ExportGpu? = nil, onProgress: (Float) -> Void = { _ in }) throws -> Data {
+        self.gpu = gpu
+        let scan = settings.filmScan && ScanScale.applies(params)
+        scanExport = scan
+        let size = scan
+            ? ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
+            : BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, maxLongSide: settings.maxLongSide)
+        let isMono = params.saturation <= -100 || (params.lutAmount >= 100 && Looks.isMonochromeLut(params.lut?.id))
+        let resolved = settings.resolveFrame(image: image, exifDate: settings.captureDate ?? image.metadata.dateTimeOriginal, monochrome: isMono)
+        let dateStamp = resolved.pentax645 == nil ? resolved.dateStamp : ""
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("rb-preview-\(UUID().uuidString).jpg")
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        try writeJpegli(image, tmp, params, size, size, resolved.jpegQuality, resolved.downscaleSharpen,
+                        dateStamp, resolved.dateStampStyle, resolved.pentax645, resolved.monochromeImprint, onProgress)
+        return try Data(contentsOf: tmp)
+    }
+
+    /**
      * [image] developed with [params] as an 8-bit sRGB image whose long side is at most [maxLongSide] (nil: full size): the
      * pixels the system JPEG export writes (full-resolution bands, area-downscaled as they stream), without the file. For
      * viewers that show the develop at screen size (RawBoy Desktop's Browse real preview). Blocking: call from a background

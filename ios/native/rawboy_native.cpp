@@ -242,4 +242,47 @@ void rb_heal(RBImage* image, const float* spots, size_t count, const float* stro
     }
 }
 
+int rb_dng_embed_preview(const uint8_t* dng, size_t dngSize, const uint8_t* previewJpeg, size_t previewSize,
+                         uint8_t** out, size_t* outSize, char* error, size_t errorSize) {
+    if (out) *out = nullptr;
+    if (outSize) *outSize = 0;
+#if RAWBOY_WITH_DNG_SDK
+    if (!dng || dngSize == 0 || !previewJpeg || previewSize == 0 || !out || !outSize) return 1;
+    try {
+        std::vector<uint8_t> result;
+        std::string err;
+        const auto r = rawboy::rewriteDng(dng, dngSize, false, 0.2f, 5, previewJpeg, previewSize, result, err);
+        if (r == rawboy::TranscodeResult::NotApplicable) return 1;
+        if (r == rawboy::TranscodeResult::Failed) {
+            if (error && errorSize > 0) {
+                std::snprintf(error, errorSize, "%s", err.c_str());
+            }
+            return -1;
+        }
+        auto* buf = static_cast<uint8_t*>(std::malloc(result.size()));
+        if (!buf) {
+            if (error && errorSize > 0) std::snprintf(error, errorSize, "out of memory");
+            return -1;
+        }
+        std::memcpy(buf, result.data(), result.size());
+        *out = buf;
+        *outSize = result.size();
+        return 0;
+    } catch (const std::exception& e) {
+        if (error && errorSize > 0) std::snprintf(error, errorSize, "%s", e.what());
+        return -1;
+    }
+#else
+    (void)dng;
+    (void)dngSize;
+    (void)previewJpeg;
+    (void)previewSize;
+    (void)error;
+    (void)errorSize;
+    return 2;
+#endif
+}
+
+void rb_dng_free(uint8_t* buffer) { std::free(buffer); }
+
 }  // extern "C"

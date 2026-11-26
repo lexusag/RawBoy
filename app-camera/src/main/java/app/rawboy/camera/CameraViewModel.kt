@@ -1343,6 +1343,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setWarmth(v: Float) = change { it.copy(warmth = v) }
     fun setJpegQuality(q: Int) = change { it.copy(jpegQuality = q.coerceIn(CameraSettings.MIN_QUALITY, 100)) }
     fun setKeepDng(keep: Boolean) = change { it.copy(keepDng = keep) }
+    fun setRawWithJpeg(on: Boolean) = change { it.copy(rawWithJpeg = on) }
+    fun setRawPreview(preview: RawPreview) = change { it.copy(rawPreview = preview) }
     fun setLossyDng(on: Boolean) = change { it.copy(lossyDng = on) }
     fun setSmallExport(on: Boolean) = change { it.copy(smallExport = on) }
 
@@ -1764,12 +1766,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     MediaStoreOutput.create(resolver, baseName, "dng", DNG_MIME, RAW_NAMING)
                 }
                 val dngStart = System.nanoTime()
+                val dngPending = settings.embedDngPreview
                 val result = try {
                     withContext(Dispatchers.IO) {
                         val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
                         val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
                         fix?.let { addGps(uri, it) }
-                        MediaStoreOutput.publish(resolver, uri)
+                        if (!dngPending) MediaStoreOutput.publish(resolver, uri)
                         result
                     }
                 } catch (t: Throwable) {
@@ -1777,7 +1780,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     throw t
                 }
                 Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE))
+                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE), dngPending = dngPending)
             } else {
                 val file = File(app.cacheDir, "$baseName-$shotId.dng")
                 val result = try {
