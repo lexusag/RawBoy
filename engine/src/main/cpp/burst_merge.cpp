@@ -102,12 +102,18 @@ BurstMerger::~BurstMerger() {
 }
 
 int BurstMerger::addFrame(const uint8_t* data, int rowStride, double gain) {
-    auto f = std::make_unique<Frame>();
-    f->raw.resize(static_cast<size_t>(width_) * height_);
+    std::vector<uint16_t> raw(static_cast<size_t>(width_) * height_);
     for (int y = 0; y < height_; ++y) {
-        std::memcpy(f->raw.data() + static_cast<size_t>(y) * width_, data + static_cast<size_t>(y) * rowStride,
+        std::memcpy(raw.data() + static_cast<size_t>(y) * width_, data + static_cast<size_t>(y) * rowStride,
                     static_cast<size_t>(width_) * sizeof(uint16_t));
     }
+    return addOwnedFrame(std::move(raw), gain);
+}
+
+int BurstMerger::addOwnedFrame(std::vector<uint16_t>&& raw, double gain) {
+    if (raw.size() != static_cast<size_t>(width_) * height_) return -1;
+    auto f = std::make_unique<Frame>();
+    f->raw = std::move(raw);
     f->gain = gain;
     int index;
     {
@@ -577,6 +583,79 @@ void BurstMerger::denoiseUnderMerged(std::vector<uint16_t>& raw) {
     });
     for (int y = 0; y < height_; ++y)
         for (const auto& [x, v] : changed[y]) raw[static_cast<size_t>(y) * width_ + x] = v;
+}
+
+RawRingBuffer::RawRingBuffer(int capacity, int width, int height)
+    : capacity_(std::max(1, capacity)), width_(width), height_(height), slots_(static_cast<size_t>(capacity_)) {}
+
+bool RawRingBuffer::push(const uint8_t* data, int rowStride, int64_t timestampNs) {
+    if (!data || width_ < 2 || height_ < 2 || rowStride < width_ * 2) return false;
+    std::lock_guard<std::mutex> lock(mutex_);
+    Slot& slot = slots_[static_cast<size_t>(writePos_)];
+    const size_t pixels = static_cast<size_t>(width_) * height_;
+    if (slot.raw.size() != pixels) slot.raw.resize(pixels);
+    for (int y = 0; y < height_; ++y) {
+        std::memcpy(slot.raw.data() + static_cast<size_t>(y) * width_, data + static_cast<size_t>(y) * rowStride,
+                    static_cast<size_t>(width_) * sizeof(uint16_t));
+    }
+    slot.timestampNs = timestampNs;
+    slot.seq = nextSeq_++;
+    slot.valid = true;
+    writePos_ = (writePos_ + 1) % capacity_;
+    return true;
+}
+
+std::vector<int64_t> RawRingBuffer::timestamps() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::vector<std::pair<uint64_t, int64_t>> ordered;
+    ordered.reserve(slots_.size());
+    for (const auto& s : slots_) {
+        if (s.valid) ordered.emplace_back(s.seq, s.timestampNs);
+    }
+    std::sort(ordered.begin(), ordered.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::vector<int64_t> out;
+    out.reserve(ordered.size());
+    for (const auto& p : ordered) out.push_back(p.second);
+    return out;
+}
+
+std::vector<int64_t> RawRingBuffer::drainTo(BurstMerger& merger, const std::vector<int64_t>& orderedTimestamps) {
+    std::vector<std::pair<int64_t, std::vector<uint16_t>>> picked;
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        picked.reserve(orderedTimestamps.size());
+        for (int64_t ts : orderedTimestamps) {
+            for (auto& s : slots_) {
+                if (s.valid && s.timestampNs == ts) {
+                    s.valid = false;
+                    picked.emplace_back(ts, std::move(s.raw));
+                    std::vector<uint16_t>().swap(s.raw);
+                    break;
+                }
+            }
+        }
+        // Release any unpicked slots as well so native RAM stays flat while the merger runs.
+        for (auto& s : slots_) {
+            s.valid = false;
+            std::vector<uint16_t>().swap(s.raw);
+        }
+        writePos_ = 0;
+    }
+    std::vector<int64_t> moved;
+    moved.reserve(picked.size());
+    for (auto& [ts, raw] : picked) {
+        if (merger.addOwnedFrame(std::move(raw), 0.0) >= 0) moved.push_back(ts);
+    }
+    return moved;
+}
+
+void RawRingBuffer::clear() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (auto& s : slots_) {
+        s.valid = false;
+        std::vector<uint16_t>().swap(s.raw);
+    }
+    writePos_ = 0;
 }
 
 }  // namespace rawboy

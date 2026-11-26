@@ -150,6 +150,13 @@ data class CameraSettings(
      */
     val rawViewfinder: Boolean = false,
     /**
+     * Experimental (Android-only): keep a rolling ring buffer of streamed RAW_SENSOR frames while the viewfinder is
+     * open and stack them on shutter press (zero-shutter-lag burst merge, falling back to a normal burst if too few
+     * frames are buffered). Offered only where the phone profile allows RAW streaming (`PreviewProfile.rawViewfinder`).
+     * Uses ~200 MB more native RAM and more battery while active.
+     */
+    val zslBurst: Boolean = false,
+    /**
      * Experimental, with [videoMotionData]: after each recording a stabilized copy is rendered from the motion data and
      * saved beside the video (`stab/`).
      */
@@ -323,6 +330,7 @@ data class CameraSettings(
         trackFocus = false,
         flatVideo = false,
         videoMotionData = false,
+        zslBurst = false,
         saveDepth = false,
         depthPortrait = false,
         showHistogram = false,
@@ -463,6 +471,7 @@ object CameraSettingsStore {
             easyMono = p.getBoolean("easyMono", d.easyMono),
             videoMotionData = p.getBoolean("videoMotionData", d.videoMotionData),
             rawViewfinder = p.getBoolean("rawViewfinder", d.rawViewfinder),
+            zslBurst = p.getBoolean("zslBurst", d.zslBurst),
             videoStabilizeAfter = p.getBoolean("videoStabilizeAfter", d.videoStabilizeAfter),
             saveDepth = p.getBoolean("saveDepth", d.saveDepth),
             depthPortrait = p.getBoolean("depthPortrait", d.depthPortrait),
@@ -555,6 +564,7 @@ object CameraSettingsStore {
             .putBoolean("easyMono", s.easyMono)
             .putBoolean("videoMotionData", s.videoMotionData)
             .putBoolean("rawViewfinder", s.rawViewfinder)
+            .putBoolean("zslBurst", s.zslBurst)
             .putBoolean("videoStabilizeAfter", s.videoStabilizeAfter)
             .putBoolean("saveDepth", s.saveDepth)
             .putBoolean("depthPortrait", s.depthPortrait)

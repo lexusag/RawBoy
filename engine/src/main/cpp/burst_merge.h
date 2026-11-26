@@ -47,6 +47,12 @@ public:
      */
     int addFrame(const uint8_t* data, int rowStride, double gain);
 
+    /**
+     * Takes ownership of an already-packed width x height 16-bit frame without copying (used by RawRingBuffer::drainTo).
+     * Returns its index (0 = reference), or -1 if finishing or wrong size.
+     */
+    int addOwnedFrame(std::vector<uint16_t>&& raw, double gain);
+
     /** A frame's exposure (time x ISO), once known; the frame is merged after that. */
     void setGain(int frame, double gain);
 
@@ -131,6 +137,50 @@ private:
     double refGain_ = 1.0;
     bool finished_ = false;  // finish() ran; the reference's raw now holds the result
     std::thread worker_;
+};
+
+/**
+ * Fixed-capacity native ring buffer of RAW_SENSOR frames for zero-shutter-lag burst stacking.
+ * Once warm, [push] overwrites the oldest slot's buffer in place (no per-frame heap allocations).
+ * On shutter press, [drainTo] moves the selected frames into a [BurstMerger] with zero copy and
+ * empties the ring so peak memory stays flat during the merge.
+ */
+class RawRingBuffer {
+public:
+    RawRingBuffer(int capacity, int width, int height);
+
+    /** Copies one 16-bit plane ([rowStride] bytes per row) into the oldest slot, tagged with [timestampNs]. */
+    bool push(const uint8_t* data, int rowStride, int64_t timestampNs);
+
+    /** Timestamps currently held in the ring, oldest to newest. */
+    std::vector<int64_t> timestamps() const;
+
+    /**
+     * Moves frames matching [orderedTimestamps] (in that exact order; first = reference) into [merger] via
+     * [BurstMerger::addOwnedFrame] and empties the ring. Returns the timestamps actually moved, in order.
+     */
+    std::vector<int64_t> drainTo(BurstMerger& merger, const std::vector<int64_t>& orderedTimestamps);
+
+    /** Releases all held frame buffers immediately (e.g. on pause, lens switch, or memory pressure). */
+    void clear();
+
+    int width() const { return width_; }
+    int height() const { return height_; }
+    int capacity() const { return capacity_; }
+
+private:
+    struct Slot {
+        std::vector<uint16_t> raw;
+        int64_t timestampNs = 0;
+        uint64_t seq = 0;
+        bool valid = false;
+    };
+
+    const int capacity_, width_, height_;
+    mutable std::mutex mutex_;
+    std::vector<Slot> slots_;
+    int writePos_ = 0;
+    uint64_t nextSeq_ = 1;
 };
 
 }  // namespace rawboy

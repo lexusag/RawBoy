@@ -39,4 +39,26 @@ object BurstNative {
     @JvmStatic external fun maxQueued(handle: Long): Int
 
     @JvmStatic external fun destroy(handle: Long)
+
+    // ---- Continuous RAW ring buffer (zero-shutter-lag burst stacking) ----
+
+    /** Allocates a native ring buffer holding up to [capacity] Bayer frames of [width] x [height]. */
+    @JvmStatic external fun ringCreate(capacity: Int, width: Int, height: Int): Long
+
+    /** Copies one RAW_SENSOR plane into the oldest slot, tagged with [timestampNs]. */
+    @JvmStatic external fun ringPush(handle: Long, plane: ByteBuffer, width: Int, height: Int, rowStride: Int, timestampNs: Long): Boolean
+
+    /** Timestamps currently in the ring, oldest to newest. */
+    @JvmStatic external fun ringTimestamps(handle: Long): LongArray
+
+    /**
+     * Moves frames matching [orderedTimestamps] (in that order; index 0 = reference) into [mergerHandle] without
+     * copying and empties the ring. Returns the timestamps actually moved, in order.
+     */
+    @JvmStatic external fun ringDrainTo(ringHandle: Long, mergerHandle: Long, orderedTimestamps: LongArray): LongArray
+
+    /** Releases all buffered frames immediately (pause, lens switch, low memory). */
+    @JvmStatic external fun ringClear(handle: Long)
+
+    @JvmStatic external fun ringDestroy(handle: Long)
 }

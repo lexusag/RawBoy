@@ -305,6 +305,10 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Зберігати дані руху з відео",
     "Whole 4:3 frame + a gyro file, to stabilize later" to
         "Увесь кадр 4:3 + файл гіроскопа, щоб стабілізувати пізніше",
+    "Continuous RAW ring buffer" to
+        "Безперервний буфер RAW-кадрів",
+    "Zero-shutter-lag frame stacking; uses ~200 MB more RAM and more battery" to
+        "Стекінг кадрів без затримки затвора; потребує ~200 МБ ОЗП і більше заряду",
     "Viewfinder from RAW" to
         "Видошукач із RAW",
     "Builds the viewfinder from the sensor's raw data, like the photo (prototype)" to
