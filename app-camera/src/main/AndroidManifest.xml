@@ -59,6 +59,13 @@
                 <action android:name="android.media.action.STILL_IMAGE_CAMERA_SECURE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="app.rawboy.camera.ACTION_STREET" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- Alias in case something still launches LockScreenCameraActivity (from a previous build) by name.
@@ -94,5 +101,17 @@
             android:name=".SaveService"
             android:exported="false"
             android:foregroundServiceType="shortService" />
+
+        <!-- Quick Settings tile for 1-tap launch straight into Street mode. -->
+        <service
+            android:name=".StreetCameraTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_street_tile"
+            android:label="@string/street_tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

@@ -162,6 +162,18 @@ class ViewfinderRenderer(
             value?.onFrame = requestRender
             field = value
         }
+    /** When true, the instant frame-0 passthrough preview renders in monochrome (e.g. Street/Easy B&W mode) until full develop params arrive. */
+    @Volatile
+    var fastMono: Boolean = false
+
+    /** Called once after [onSurfaceCreated] links the initial shaders: (elapsedMs, cacheHits, cacheMisses). */
+    @Volatile
+    var onSurfaceReady: ((Long, Int, Int) -> Unit)? = null
+
+    /** Called when a frame is drawn to the screen (`developed = false` for instant frame-0 passthrough, `true` for full develop). */
+    @Volatile
+    var onFirstFrame: ((Boolean) -> Unit)? = null
+
     private var rawLinearize: RawLinearizeProgram? = null
     /** The raw frame on the GPU now, kept (out of the pool) until a newer one replaces it: its levels draw it. */
     private var rawShown: RawPreviewFrame? = null
@@ -174,6 +186,7 @@ class ViewfinderRenderer(
     private val texMatrix = FloatArray(16)
 
     private var linearize: LinearizeProgram? = null
+    private var fastPreview: FastPreviewProgram? = null
     private var copy: PassProgram? = null
     private var boost: PassProgram? = null
     private var boxDown: PassProgram? = null
@@ -213,8 +226,20 @@ class ViewfinderRenderer(
     private var lastLuma = 0L
     private var viewWidth = 1
     private var viewHeight = 1
+    private var reportedPassthrough = false
+    private var reportedDeveloped = false
+
+    private fun ensureRawLinearize(): RawLinearizeProgram = rawLinearize ?: RawLinearizeProgram().also { rawLinearize = it }
+    private fun ensureLumaProgram(): LumaProgram = lumaProgram ?: LumaProgram().also { lumaProgram = it }
+    private fun ensureTurn(): TurnProgram = turn ?: TurnProgram().also { turn = it }
+    private fun ensureFlatVideo(): FlatProgram = flatVideo ?: FlatProgram().also { flatVideo = it }
+    private fun ensureDevelop(): DevelopProgram = develop ?: DevelopProgram(forExport = false).also { develop = it }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
+        val startedMs = SystemClock.uptimeMillis()
+        GlProgramCache.resetStats()
+        reportedPassthrough = false
+        reportedDeveloped = false
         // A new context: every GL object (and the camera's texture) is gone.
         linear.reset()
         small.reset()
@@ -228,6 +253,12 @@ class ViewfinderRenderer(
         track.reset()
         screen.reset()
         videoTurned.reset()
+        // Drop lazily compiled programs bound to the previous EGL context.
+        rawLinearize = null
+        lumaProgram = null
+        turn = null
+        flatVideo = null
+        develop = null
         // The context is new: the old EGL surface (and the program state it shared) is gone with it.
         // Only an encoder context of its own outlives it (and is let go here); a surface in the old context went with it.
         encoder?.takeIf { it.ownContext }?.discard()
@@ -237,7 +268,7 @@ class ViewfinderRenderer(
         pixelBuffer = 0
         pixelBufferSize = 0
         // The camera texture goes first: handing the SurfaceTexture over starts the camera (lens discovery, open, session)
-        // while the shaders below compile (~1 s on the Pixel), instead of after them.
+        // while the minimal shaders below link, instead of after them.
         val ids = IntArray(1)
         GLES30.glGenTextures(1, ids, 0)
         cameraTexture = ids[0]
@@ -254,19 +285,17 @@ class ViewfinderRenderer(
         onSurfaceTexture(st)
         val yuv = GLES30.glGetString(GLES30.GL_EXTENSIONS)?.contains("GL_EXT_YUV_target") == true
         Log.d("RawBoyViewfinder", "camera frames: " + if (yuv) "YUV, converted here" else "RGB from the driver")
+        // Only link the lightweight frame-0 programs eagerly; heavy DevelopProgram and optional features
+        // (RawLinearize, Luma, Turn, Flat) link lazily on first use (and load from GlProgramCache when warm).
+        quad = FullscreenQuad()
         linearize = LinearizeProgram(yuv)
-        rawLinearize = RawLinearizeProgram()
+        fastPreview = FastPreviewProgram()
         rawShown?.let { rawFrames?.recycle(it) }
         rawShown = null
         copy = PassProgram(PassProgram.COPY, trilinear = true)
         boost = PassProgram(PassProgram.BOOST, trilinear = false)
         boxDown = PassProgram(PassProgram.BOX_DOWN, trilinear = false)
         tailScatter = PassProgram(PassProgram.TAIL_SCATTER, trilinear = false)
-        lumaProgram = LumaProgram()
-        turn = TurnProgram()
-        flatVideo = FlatProgram()
-        develop = DevelopProgram(forExport = false)
-        quad = FullscreenQuad()
         lutTexture = LutTexture()
         filmTextures = FilmTextures()
         shadingTexture = ShadingTexture()
@@ -274,7 +303,8 @@ class ViewfinderRenderer(
         baseRead = Target(float32 = true).takeIf {
             GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty().contains("GL_EXT_color_buffer_float")
         }
-
+        val (hits, misses) = GlProgramCache.stats()
+        onSurfaceReady?.invoke(SystemClock.uptimeMillis() - startedMs, hits, misses)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
@@ -345,10 +375,26 @@ class ViewfinderRenderer(
         if (trackListener != null && !track.busy) startLuma(w, h, trackTarget, track, TRACK_MAX_DIMENSION)
         drops.mark(DropLog.READBACKS)
 
-        // Pass 2: develop to the screen, aspect-fit. The first params come from the first readback above.
-        val p = params ?: return
-        // Turned: drawn upright at the window's size turned back, then turned onto the window.
+        // Pass 2: develop to the screen, aspect-fit. Before the first analysis arrives (params == null), draw the
+        // linearized frame directly with a fast Rec.2020 -> sRGB tone roll-off so the viewfinder is live on frame 0.
         val k = ((turns % 4) + 4) % 4
+        val p = params
+        if (p == null) {
+            val viewW = if (k % 2 == 1) this.viewHeight else this.viewWidth
+            val viewH = if (k % 2 == 1) this.viewWidth else this.viewHeight
+            val r = ZoomMath.fitRect(viewW, viewH, f.fullWidth, f.fullHeight, 0)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, this.viewWidth, this.viewHeight)
+            fastPreview!!.draw(quad!!, linear.texture, k, r[2] / viewW, r[3] / viewH, fastMono)
+            if (!reportedPassthrough) {
+                reportedPassthrough = true
+                onFirstFrame?.invoke(false)
+            }
+            drops.end()
+            return
+        }
+        val dev = ensureDevelop()
+        // Turned: drawn upright at the window's size turned back, then turned onto the window.
         val viewWidth = if (k % 2 == 1) this.viewHeight else this.viewWidth
         val viewHeight = if (k % 2 == 1) this.viewWidth else this.viewHeight
         val outW = p.lens.outputWidth
@@ -373,14 +419,14 @@ class ViewfinderRenderer(
             videoTurned.ensure(devW, devH, mipmapped = false)
             videoTurned.bindForDrawing()
             bindDevelopTextures(p)
-            develop!!.bind(p, geometry, 1f, 1f, flipY = true)
-            develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
-            develop!!.setGrainFrame(grainFrame)
+            dev.bind(p, geometry, 1f, 1f, flipY = true)
+            dev.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
+            dev.setGrainFrame(grainFrame)
             quad!!.draw()
 
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, this.viewWidth, this.viewHeight)
-            turn!!.draw(quad!!, videoTurned.texture, k, r[2] / viewWidth, r[3] / viewHeight)
+            ensureTurn().draw(quad!!, videoTurned.texture, k, r[2] / viewWidth, r[3] / viewHeight)
             drops.mark(DropLog.DEVELOP)
             drawVideoFromTexture(activeSink, videoTurned.texture, vk, outW * cover / pw, outH * cover / ph, frameNs)
             drops.mark(DropLog.VIDEO)
@@ -398,9 +444,9 @@ class ViewfinderRenderer(
             GLES30.glViewport(0, 0, viewWidth, viewHeight)
         }
         bindDevelopTextures(p)
-        develop!!.bind(p, geometry, r[2] / viewWidth, r[3] / viewHeight, flipY = true)
-        develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
-        develop!!.setGrainFrame(grainFrame)
+        dev.bind(p, geometry, r[2] / viewWidth, r[3] / viewHeight, flipY = true)
+        dev.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
+        dev.setGrainFrame(grainFrame)
         quad!!.draw()
         loupe?.let { l ->
             // The same develop again, into a square viewport, sampling only the region around the point.
@@ -411,15 +457,19 @@ class ViewfinderRenderer(
             val uh = min(1f, side / (l.zoom * r[3]))
             val uv = floatArrayOf((l.x - uw / 2f).coerceIn(0f, 1f - uw), (l.y - uh / 2f).coerceIn(0f, 1f - uh), uw, uh)
             GLES30.glViewport(x0, viewHeight - y0 - side, side, side) // GL's origin is the bottom left
-            develop!!.bind(p, geometry, 1f, 1f, flipY = true, uvRect = uv)
-            develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
+            dev.bind(p, geometry, 1f, 1f, flipY = true, uvRect = uv)
+            dev.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
             quad!!.draw()
             GLES30.glViewport(0, 0, viewWidth, viewHeight)
         }
         if (k != 0) {
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, this.viewWidth, this.viewHeight)
-            turn!!.draw(quad!!, screen.texture, k)
+            ensureTurn().draw(quad!!, screen.texture, k)
+        }
+        if (!reportedDeveloped) {
+            reportedDeveloped = true
+            onFirstFrame?.invoke(true)
         }
         drops.mark(DropLog.DEVELOP)
         drawVideo(p, f, w, h, sw, sh, tw, th, frameNs, grainFrame)
@@ -434,7 +484,7 @@ class ViewfinderRenderer(
      * time every 5 s (`RawBoyViewfinder`).
      */
     private fun drawRaw(f: Frame): Long? {
-        val program = rawLinearize ?: return null
+        val program = ensureRawLinearize()
         val source = rawFrames
         source?.take()?.let { next ->
             val started = System.nanoTime()
@@ -514,7 +564,7 @@ class ViewfinderRenderer(
             GLES30.glDeleteSync(fence)
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, sink.width, sink.height)
-            turn!!.draw(enc.quad!!, texture, k, scaleX, scaleY)
+            ensureTurn().draw(enc.quad!!, texture, k, scaleX, scaleY)
         } else {
             if (!enc.makeCurrent()) {
                 sink.failed = true
@@ -523,7 +573,7 @@ class ViewfinderRenderer(
             }
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, sink.width, sink.height)
-            turn!!.draw(quad!!, texture, k, scaleX, scaleY)
+            ensureTurn().draw(quad!!, texture, k, scaleX, scaleY)
         }
         enc.swapAndRestore(pts)
         if (sink.framesSent == 0) sink.firstSentAtMs = SystemClock.uptimeMillis()
@@ -576,17 +626,18 @@ class ViewfinderRenderer(
         val cover = max(pw.toFloat() / outW, ph.toFloat() / outH)
         if (sink.flat) {
             // No look: the linear frame, exposed as the viewfinder's auto develop would, Apple Log encoded.
-            flatVideo!!.draw(quad!!, linear.texture, pw / (outW * cover), ph / (outH * cover), p.exposure / BASE_EXPOSURE_GAIN * 2f.pow(sink.raiseEv))
+            ensureFlatVideo().draw(quad!!, linear.texture, pw / (outW * cover), ph / (outH * cover), p.exposure / BASE_EXPOSURE_GAIN * 2f.pow(sink.raiseEv))
             finishVideo(sink, enc, k, pts)
             return
         }
+        val dev = ensureDevelop()
         bindDevelopTextures(p)
         val geometry = SampleGeometry(
             w, h, PixelRect(0, 0, f.fullWidth, f.fullHeight), PixelRect(0, 0, outW, outH), f.fullWidth, f.fullHeight,
         )
-        develop!!.bind(p, geometry, outW * cover / pw, outH * cover / ph, flipY = true)
-        develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
-        develop!!.setGrainFrame(grainFrame)
+        dev.bind(p, geometry, outW * cover / pw, outH * cover / ph, flipY = true)
+        dev.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
+        dev.setGrainFrame(grainFrame)
         quad!!.draw()
         finishVideo(sink, enc, k, pts)
     }
@@ -607,11 +658,11 @@ class ViewfinderRenderer(
             GLES30.glDeleteSync(fence)
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, sink.width, sink.height)
-            turn!!.draw(enc.quad!!, videoTurned.texture, k)
+            ensureTurn().draw(enc.quad!!, videoTurned.texture, k)
         } else if (k != 0) {
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, sink.width, sink.height)
-            turn!!.draw(quad!!, videoTurned.texture, k)
+            ensureTurn().draw(quad!!, videoTurned.texture, k)
         }
         enc.swapAndRestore(pts)
         if (sink.framesSent == 0) sink.firstSentAtMs = SystemClock.uptimeMillis()
@@ -701,7 +752,7 @@ class ViewfinderRenderer(
         val lh = max(1, (h * scale).roundToInt())
         target.ensure(lw / 4, lh, mipmapped = false)
         target.bindForDrawing()
-        lumaProgram!!.draw(quad!!, linear.texture, lw, max(0f, log2(max(w, h).toFloat() / max(lw, lh))))
+        ensureLumaProgram().draw(quad!!, linear.texture, lw, max(0f, log2(max(w, h).toFloat() / max(lw, lh))))
         read.start(lw, lh)
     }
 
@@ -1371,6 +1422,69 @@ float grey(float px) {
 void main() {
     float x = floor(gl_FragCoord.x) * 4.0;
     fragColor = vec4(grey(x), grey(x + 1.0), grey(x + 2.0), grey(x + 3.0));
+}
+"""
+        }
+    }
+
+    /**
+     * Lightweight frame-0 preview: draws [linear.texture] (upright linear Rec.2020, row 0 = top) directly onto the
+     * window with aspect-fit, display turn, soft highlight roll-off, and sRGB gamma. Compiles in ~2 ms and lets the
+     * viewfinder show live camera frames immediately while [DevelopProgram] and the first scene analysis warm up.
+     */
+    private class FastPreviewProgram {
+        private val id = GlUtil.createProgram(LinearizeProgram.VERTEX, FRAGMENT)
+        private val uSource = GLES30.glGetUniformLocation(id, "uSource")
+        private val uTurns = GLES30.glGetUniformLocation(id, "uTurns")
+        private val uScale = GLES30.glGetUniformLocation(id, "uScale")
+        private val uMono = GLES30.glGetUniformLocation(id, "uMono")
+
+        fun draw(quad: FullscreenQuad, texture: Int, turns: Int, scaleX: Float, scaleY: Float, mono: Boolean) {
+            GLES30.glUseProgram(id)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
+            GLES30.glUniform1i(uSource, 0)
+            GLES30.glUniform1i(uTurns, turns)
+            GLES30.glUniform2f(uScale, scaleX, scaleY)
+            GLES30.glUniform1f(uMono, if (mono) 1f else 0f)
+            quad.draw()
+        }
+
+        companion object {
+            const val FRAGMENT = """#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D uSource;
+uniform int uTurns;
+uniform vec2 uScale;
+uniform float uMono;
+in vec2 vUp;
+out vec4 fragColor;
+void main() {
+    vec2 p;
+    if (uTurns == 1) p = vec2(1.0 - vUp.y, vUp.x);
+    else if (uTurns == 2) p = 1.0 - vUp;
+    else if (uTurns == 3) p = vec2(vUp.y, 1.0 - vUp.x);
+    else p = vUp;
+    vec2 uv = vec2(0.5 + (p.x - 0.5) / uScale.x, 0.5 - (p.y - 0.5) / uScale.y);
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+    }
+    vec3 r2020 = max(texture(uSource, uv).rgb, 0.0) * 1.6245;
+    vec3 srgb;
+    if (uMono > 0.5) {
+        float y = dot(r2020, vec3(0.2627, 0.6780, 0.0593));
+        srgb = vec3(y);
+    } else {
+        srgb = max(vec3(
+            1.6605 * r2020.r - 0.5876 * r2020.g - 0.0728 * r2020.b,
+            -0.1246 * r2020.r + 1.1329 * r2020.g - 0.0083 * r2020.b,
+            -0.0182 * r2020.r - 0.1006 * r2020.g + 1.1187 * r2020.b
+        ), 0.0);
+    }
+    vec3 mapped = srgb / (1.0 + srgb);
+    fragColor = vec4(pow(clamp(mapped, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
 }
 """
         }

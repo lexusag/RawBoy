@@ -453,6 +453,16 @@ JNIEXPORT jlongArray JNICALL Java_app_rawboy_raw_BurstNative_ringDrainTo(JNIEnv*
     return out;
 }
 
+JNIEXPORT jlong JNICALL Java_app_rawboy_raw_BurstNative_ringCopyFrame(JNIEnv* env, jclass, jlong handle,
+                                                                      jlong timestampNs, jobject dest) {
+    auto* ring = ringOf(handle);
+    if (!ring || !dest) return 0;
+    auto* dst = static_cast<uint8_t*>(env->GetDirectBufferAddress(dest));
+    const jlong cap = env->GetDirectBufferCapacity(dest);
+    if (!dst || cap <= 0) return 0;
+    return static_cast<jlong>(ring->copyFrame(static_cast<int64_t>(timestampNs), dst, static_cast<size_t>(cap)));
+}
+
 JNIEXPORT void JNICALL Java_app_rawboy_raw_BurstNative_ringClear(JNIEnv*, jclass, jlong handle) {
     ringOf(handle)->clear();
 }

@@ -270,6 +270,9 @@ internal object ShotSaver {
         queue.launch {
             for ((app, shot) in shots) {
                 val p = try {
+                    // Street mode burst pacing: pause heavy CPU decode briefly while the user is actively shooting,
+                    // resuming immediately once they pause or lock the phone.
+                    awaitStreetPacing()
                     // A second open shot only when there's memory for it: not while a burst merges, nor when the
                     // system is low on memory. Otherwise wait for the shot in develop, as when shots never overlapped.
                     if (inDevelop.value > 0) {
@@ -383,6 +386,27 @@ internal object ShotSaver {
 
     fun endMerge() {
         merges.update { (it - 1).coerceAtLeast(0) }
+    }
+
+    private const val STREET_PACE_MS = 900L
+    private val streetHoldUntil = AtomicLong(0L)
+
+    /** Defers heavy CPU decode briefly while the user is actively firing Street shots so viewfinder & shutter stay smooth. */
+    fun noteStreetCapture() {
+        streetHoldUntil.set(android.os.SystemClock.uptimeMillis() + STREET_PACE_MS)
+    }
+
+    /** Clears Street shoot pacing (e.g. camera paused / screen locked) so queued shots develop at full speed right away. */
+    fun flushStreetPacing() {
+        streetHoldUntil.set(0L)
+    }
+
+    private suspend fun awaitStreetPacing() {
+        while (true) {
+            val left = streetHoldUntil.get() - android.os.SystemClock.uptimeMillis()
+            if (left <= 0L || activeViews.get() <= 0) return
+            kotlinx.coroutines.delay(left.coerceAtMost(150L))
+        }
     }
 
     fun attachView() {

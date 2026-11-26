@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="street_camera"
+        android:enabled="true"
+        android:icon="@drawable/ic_street_tile"
+        android:shortcutShortLabel="@string/street_shortcut_short"
+        android:shortcutLongLabel="@string/street_shortcut_long">
+        <intent
+            android:action="app.rawboy.camera.ACTION_STREET"
+            android:targetPackage="app.rawboy.camera"
+            android:targetClass="app.rawboy.camera.CameraActivity" />
+    </shortcut>
+</shortcuts>

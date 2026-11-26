@@ -1,0 +1,36 @@
+# ART Baseline Profile for RawBoy Camera cold-start & Street mode critical path.
+# Ahead-of-time compiles activity launch, ViewModel init, fast cached camera open,
+# GL viewfinder rendering, and Compose screen inflation on install.
+HSPLapp/rawboy/camera/CameraActivity;->**(**)**
+HSPLapp/rawboy/camera/CameraViewModel;->**(**)**
+HSPLapp/rawboy/camera/CameraSettings;->**(**)**
+HSPLapp/rawboy/camera/CameraSettingsStore;->**(**)**
+HSPLapp/rawboy/camera/StartupTrace;->**(**)**
+HSPLapp/rawboy/camera/ShotSaver;->**(**)**
+HSPLapp/rawboy/camera/capture/CameraController;->**(**)**
+HSPLapp/rawboy/camera/capture/FastLensCache;->**(**)**
+HSPLapp/rawboy/camera/capture/FastLensEntry;->**(**)**
+HSPLapp/rawboy/camera/capture/SnapFocus;->**(**)**
+HSPLapp/rawboy/camera/capture/StreetShutter;->**(**)**
+HSPLapp/rawboy/camera/capture/StreetExposure;->**(**)**
+HSPLapp/rawboy/camera/ui/CameraScreenKt;->**(**)**
+HSPLapp/rawboy/camera/ui/ViewfinderKt;->**(**)**
+HSPLapp/rawboy/camera/ui/CameraLandscapeKt;->**(**)**
+HSPLapp/rawboy/gl/ViewfinderRenderer;->**(**)**
+HSPLapp/rawboy/gl/GlProgramCache;->**(**)**
+HSPLapp/rawboy/gl/GlUtil;->**(**)**
+HSPLapp/rawboy/gl/DevelopProgram;->**(**)**
+HSPLapp/rawboy/auto/analysis/SceneAnalyzer;->**(**)**
+HSPLapp/rawboy/auto/analysis/AutoTone;->**(**)**
+HSPLapp/rawboy/auto/looks/LookApplier;->**(**)**
+Lapp/rawboy/camera/CameraActivity;
+Lapp/rawboy/camera/CameraViewModel;
+Lapp/rawboy/camera/CameraSettings;
+Lapp/rawboy/camera/CameraSettingsStore;
+Lapp/rawboy/camera/StartupTrace;
+Lapp/rawboy/camera/capture/CameraController;
+Lapp/rawboy/camera/capture/FastLensCache;
+Lapp/rawboy/camera/capture/FastLensEntry;
+Lapp/rawboy/gl/ViewfinderRenderer;
+Lapp/rawboy/gl/GlProgramCache;
+Lapp/rawboy/gl/GlUtil;

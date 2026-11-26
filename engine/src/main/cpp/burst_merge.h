@@ -161,6 +161,12 @@ public:
      */
     std::vector<int64_t> drainTo(BurstMerger& merger, const std::vector<int64_t>& orderedTimestamps);
 
+    /**
+     * Copies one buffered frame matching [timestampNs] (or the newest valid frame when [timestampNs] == 0) into [dst]
+     * without disturbing the ring. Returns the copied frame's timestamp, or 0 if not found or [dstBytes] is too small.
+     */
+    int64_t copyFrame(int64_t timestampNs, uint8_t* dst, size_t dstBytes) const;
+
     /** Releases all held frame buffers immediately (e.g. on pause, lens switch, or memory pressure). */
     void clear();
 

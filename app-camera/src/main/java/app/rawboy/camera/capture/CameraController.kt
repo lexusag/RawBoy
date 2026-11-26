@@ -183,8 +183,23 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         /** The lens offers its sensor's dual-pixel data as a raw depth stream. */
         val hasDualPixel: Boolean get() = dualPixel != null
 
+        /** Minimum focus distance in diopters (0 on fixed-focus lenses). */
+        val minFocusDiopters: Float get() = characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f
+
+        /** Hyperfocal distance in diopters (0 when unreported by the HAL). */
+        val hyperfocalDiopters: Float get() = characteristics.get(CameraCharacteristics.LENS_INFO_HYPERFOCAL_DISTANCE) ?: 0f
+
+        /** Whether LENS_FOCUS_DISTANCE is calibrated or approximate in diopters (false = uncalibrated units). */
+        val focusCalibrated: Boolean get() =
+            (characteristics.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION)
+                ?: CameraMetadata.LENS_INFO_FOCUS_DISTANCE_CALIBRATION_UNCALIBRATED) !=
+                CameraMetadata.LENS_INFO_FOCUS_DISTANCE_CALIBRATION_UNCALIBRATED
+
         /** The lens can focus (a fixed-focus lens reports a minimum focus distance of 0). */
-        val canFocus get() = (characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
+        val canFocus get() = minFocusDiopters > 0f
+
+        val isoRange: Range<Int>? get() = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)
+        val exposureRangeNs: Range<Long>? get() = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE)
 
         val hasLensShadingMap get() = CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON in shadingMapModes
         val hasFaceDetection get() = CameraMetadata.STATISTICS_FACE_DETECT_MODE_SIMPLE in faceModes
@@ -314,15 +329,23 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private var readerCloseDeferred = false
     /** Takes every raw image while a burst runs (camera thread; the image is closed after it returns). */
     private var burstSink: ((Image) -> Unit)? = null
-    /** Locked focus (and metering) point, upright normalised as shown; null = continuous autofocus. */
+    /** Locked focus (and metering) point, upright normalised as shown; null = continuous autofocus or [snapFocus]. */
     @Volatile
     private var focusPoint: Pair<Float, Float>? = null
+    /** Street mode zone focus preset ([SnapFocus.AF] = normal continuous AF). */
+    @Volatile
+    private var snapFocus: SnapFocus = SnapFocus.AF
     /** Whether [focusPoint] follows a tracked subject ([trackFocus]): continuous AF there instead of a held scan. */
     @Volatile
     private var tracking = false
     /** While tracking: whether the subject is in sight, so AE meters it; while it's held (hidden), the centre box. */
     @Volatile
     private var meterFocus = true
+
+    /** Early `openCamera` started in `Activity.onCreate` in parallel with Compose/EGL initialization. Guarded by [preopenLock]. */
+    private val preopenLock = Any()
+    private var preopenId: String? = null
+    private var preopenDeferred: CompletableDeferred<CameraDevice>? = null
 
     /**
      * Side of the focus lock's AF box, as a share of the sensor's short side: [FOCUS_SIZE], or [MeterArea.SPOT_SIZE]
@@ -346,16 +369,21 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private var rawViewfinder = false
 
     /**
-     * Experimental zero-shutter-lag burst ring buffer is active ([setRawRing]): repeating request streams RAW_SENSOR
-     * frames into [rawRingHandle] so shutter press can merge them immediately without waiting for a captureBurst.
+     * Experimental zero-shutter-lag burst ring buffer or lightweight Street single-frame ZSL ring buffer is active:
+     * repeating request streams RAW_SENSOR frames into [rawRingHandle] so shutter press can capture immediately.
      */
     @Volatile
     private var rawRingWanted = false
+
+    /** Desired native ring capacity (3 for Street single-frame ZSL, 8 for ZSL burst stacking). */
+    @Volatile
+    private var rawRingCapacity = RAW_RING_CAPACITY
 
     /** Native `RawRingBuffer` handle (BurstNative.ring*); camera thread only. */
     private var rawRingHandle = 0L
     private var rawRingWidth = 0
     private var rawRingHeight = 0
+    private var rawRingAllocatedCapacity = 0
 
     /** True while a ZSL merge is running so the ring does not reallocate ~200 MB on top of BurstMerger. Camera thread. */
     private var rawRingPaused = false
@@ -555,9 +583,137 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         )
     }
 
-    /** Opens the camera and starts the preview into [surfaceTexture]. Requires the CAMERA permission. */
-    suspend fun start(info: Info, surfaceTexture: SurfaceTexture) {
-        captureLock.withLock { stop(alreadyLocked = true) }
+    /**
+     * Hydrates a cached [FastLensEntry] into an [Info] with 1-2 `getCameraCharacteristics` calls (no multi-camera
+     * enumeration, no depth/dual-pixel probe), allowing [start] to open the lens immediately on cold launch.
+     */
+    fun fastInfo(entry: FastLensEntry): Info? = runCatching {
+        val lensId = entry.physicalId ?: entry.openId
+        val c = manager.getCameraCharacteristics(lensId)
+        val opened = if (entry.physicalId != null) manager.getCameraCharacteristics(entry.openId) else c
+        val region = opened.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: Rect()
+        val raw = Size(entry.rawWidth, entry.rawHeight)
+        Info(
+            openId = entry.openId,
+            physicalId = entry.physicalId,
+            label = entry.label,
+            facing = entry.facing,
+            equivalentFocal = entry.equivalentFocal,
+            characteristics = c,
+            regionArray = region,
+            rawSize = raw,
+            previewSize = Size(entry.previewWidth, entry.previewHeight),
+            sensorOrientation = entry.sensorOrientation,
+            previewGamma = entry.previewGamma,
+            toneMapModes = c.get(CameraCharacteristics.TONEMAP_AVAILABLE_TONE_MAP_MODES) ?: IntArray(0),
+            shadingMapModes = c.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_LENS_SHADING_MAP_MODES) ?: IntArray(0),
+            faceModes = c.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES) ?: IntArray(0),
+            activeArray = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: Rect(0, 0, raw.width, raw.height),
+            xyzToCamera = d65ColorMatrix(c),
+            cameraToSrgb = rawCameraToSrgb(c),
+            hasFlash = entry.hasFlash,
+            maxResSize = if (entry.maxResWidth > 0 && entry.maxResHeight > 0) Size(entry.maxResWidth, entry.maxResHeight) else null,
+            maxResFormat = entry.maxResFormat,
+            hiRes = entry.hiRes,
+            fNumber = entry.fNumber,
+            depthSize = null,
+            dualPixel = null,
+        )
+    }.onFailure { Log.w(TAG, "fastInfo failed for ${entry.openId}/${entry.physicalId}", it) }.getOrNull()
+
+    /**
+     * Starts `CameraManager.openCamera(id)` eagerly (e.g. from `CameraActivity.onCreate`) before the viewfinder's
+     * SurfaceTexture exists, overlapping HAL camera power-up with Compose and EGL initialization. Requires CAMERA permission.
+     */
+    @SuppressLint("MissingPermission")
+    fun preopen(id: String) {
+        val deferred = synchronized(preopenLock) {
+            if (device != null || (preopenId == id && preopenDeferred != null)) return
+            cancelPreopenLocked(keepId = null)
+            val d = CompletableDeferred<CameraDevice>()
+            preopenId = id
+            preopenDeferred = d
+            d
+        }
+        app.rawboy.camera.StartupTrace.mark("earlyOpenStart", "id=$id")
+        handler.post {
+            val active = synchronized(preopenLock) { preopenDeferred === deferred }
+            if (!active) return@post
+            try {
+                manager.openCamera(id, executor, object : CameraDevice.StateCallback() {
+                    override fun onOpened(camera: CameraDevice) {
+                        app.rawboy.camera.StartupTrace.mark("openCameraDone", "preopen id=$id")
+                        if (!deferred.complete(camera)) camera.close()
+                    }
+
+                    override fun onDisconnected(camera: CameraDevice) {
+                        camera.close()
+                        val err = IOException("Camera disconnected")
+                        if (!deferred.completeExceptionally(err)) failInFlight(camera, err)
+                    }
+
+                    override fun onError(camera: CameraDevice, error: Int) {
+                        camera.close()
+                        val err = IOException("Camera $id error $error")
+                        if (!deferred.completeExceptionally(err)) failInFlight(camera, err)
+                    }
+                })
+            } catch (e: Exception) {
+                deferred.completeExceptionally(IOException("Cannot open camera $id: ${e.message}", e))
+            }
+        }
+    }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun cancelPreopenLocked(keepId: String?) {
+        if (keepId != null && preopenId == keepId) return
+        val old = preopenDeferred
+        preopenId = null
+        preopenDeferred = null
+        if (old != null) {
+            old.cancel()
+            if (old.isCompleted && !old.isCancelled) {
+                runCatching { old.getCompleted().close() }
+            }
+        }
+    }
+
+    /** Consumes a matching [preopen] device if one is in flight, otherwise calls [open]. */
+    private suspend fun openOrConsumePreopen(id: String): CameraDevice {
+        val matching = synchronized(preopenLock) {
+            if (preopenId == id && preopenDeferred != null) {
+                val d = preopenDeferred!!
+                preopenId = null
+                preopenDeferred = null
+                d
+            } else {
+                cancelPreopenLocked(keepId = null)
+                null
+            }
+        }
+        if (matching != null) {
+            return try {
+                matching.await()
+            } catch (e: CancellationException) {
+                if (matching.isCompleted && !matching.isCancelled) {
+                    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+                    runCatching { matching.getCompleted().close() }
+                }
+                throw e
+            }
+        }
+        return open(id).also { app.rawboy.camera.StartupTrace.mark("openCameraDone", "id=$id") }
+    }
+
+    /**
+     * Opens the camera and starts the preview into [surfaceTexture]. Requires the CAMERA permission.
+     * [knownPhysicalFromLogical]: cached answer to whether `info.physicalId` streams from `info.openId` (skips the
+     * synchronous `isSessionConfigurationSupported` IPC on startup; still falls back if session creation fails).
+     * Returns whether a physical lens streamed from its logical camera (for updating [FastLensCache]).
+     */
+    suspend fun start(info: Info, surfaceTexture: SurfaceTexture, knownPhysicalFromLogical: Boolean? = null): Boolean {
+        val keepPreopen = if (info.physicalId != null && knownPhysicalFromLogical == false) info.physicalId else info.openId
+        captureLock.withLock { stop(alreadyLocked = true, keepPreopenId = keepPreopen) }
         this.info = info
         handler.post { compensationTracker.reset() }
         surfaceTexture.setDefaultBufferSize(info.previewSize.width, info.previewSize.height)
@@ -598,10 +754,10 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         // A physical lens of a logical camera: stream it from the logical camera if the phone allows that
         // combination; otherwise try opening the lens on its own.
         val physical = info.physicalId
-        if (physical != null) {
-            val camera = open(info.openId)
+        if (physical != null && knownPhysicalFromLogical != false) {
+            val camera = openOrConsumePreopen(info.openId)
             val outputs = sessionOutputs(camera, preview, reader, physical, info)
-            val supported = runCatching {
+            val supported = knownPhysicalFromLogical ?: runCatching {
                 camera.isSessionConfigurationSupported(SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputs, executor, NO_SESSION))
             }.getOrDefault(true) // not answered: just try
             Log.d(TAG, "${info.label}: physical $physical streams from ${info.openId}: supported=$supported")
@@ -609,10 +765,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 device = camera
                 try {
                     session = createSession(camera, outputs)
+                    app.rawboy.camera.StartupTrace.mark("sessionConfigured", "${info.label} physical=${info.openId}/$physical")
                     DebugProbe.logTemplates(camera, info.label)
                     streamingPhysical = physical
                     repeatPreview()
-                    return
+                    return true
                 } catch (e: CancellationException) {
                     camera.close()
                     throw e
@@ -625,12 +782,14 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             camera.close()
             device = null
         }
-        val camera = open(physical ?: info.openId)
+        val camera = openOrConsumePreopen(physical ?: info.openId)
         device = camera
         session = createSession(camera, sessionOutputs(camera, preview, reader, null, info))
+        app.rawboy.camera.StartupTrace.mark("sessionConfigured", "${info.label} id=${physical ?: info.openId}")
         DebugProbe.logTemplates(camera, info.label)
         streamingPhysical = null
         repeatPreview()
+        return false
     }
 
     @SuppressLint("MissingPermission") // the activity holds the CAMERA permission before starting
@@ -832,18 +991,41 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     }
 
     /**
-     * Turns the experimental zero-shutter-lag RAW ring buffer on or off: the repeating request streams RAW_SENSOR
-     * frames into [rawRingHandle] so shutter press can merge them immediately. Turning it off releases native memory
-     * immediately.
+     * Turns the continuous RAW ring buffer on or off (capacity 8 for ZSL burst merge, 3 for lightweight Street
+     * single-frame ZSL): the repeating request streams RAW_SENSOR frames into [rawRingHandle] so shutter press can
+     * capture immediately. Turning it off releases native memory immediately.
      */
-    fun setRawRing(on: Boolean) {
-        if (rawRingWanted == on) return
+    fun setRawRing(on: Boolean, capacity: Int = RAW_RING_CAPACITY) {
+        val cap = capacity.coerceIn(2, RAW_RING_CAPACITY)
+        if (rawRingWanted == on && (!on || rawRingCapacity == cap)) return
         rawRingWanted = on
+        rawRingCapacity = cap
         handler.post {
             if (!on) {
                 destroyRawRingOnHandler()
                 if (!rawViewfinder) streamStamps.clear()
+            } else if (rawRingHandle != 0L && rawRingAllocatedCapacity != cap) {
+                destroyRawRingOnHandler()
             }
+            if (session != null) runCatching { repeatPreview() }
+        }
+    }
+
+    /**
+     * Sets Street mode's zone focus distance ([SnapFocus]): non-AF puts Camera2 in manual focus at the preset
+     * diopter distance (0 ms focus lag); [SnapFocus.AF] returns to continuous autofocus.
+     */
+    fun setSnapFocus(focus: SnapFocus) {
+        if (snapFocus == focus) return
+        snapFocus = focus
+        handler.post {
+            if (focus != SnapFocus.AF) {
+                focusPoint = null
+                tracking = false
+                focusWatch = null
+                _focusSize.value = FOCUS_SIZE
+            }
+            clearRawRingOnHandler()
             if (session != null) runCatching { repeatPreview() }
         }
     }
@@ -864,6 +1046,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             rawRingHandle = 0L
             rawRingWidth = 0
             rawRingHeight = 0
+            rawRingAllocatedCapacity = 0
         }
         rawRingResults.clear()
         rawRingPaused = false
@@ -878,7 +1061,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         depthWanted = source
     }
 
-    private fun rawViewfinderStreams(inf: Info): Boolean = rawViewfinder && rawFrames != null && !inf.hiRes
+    /** Whether [inf] builds the live viewfinder itself from the streamed RAW_SENSOR target (not merely ZSL ring). */
+    fun rawViewfinderStreams(inf: Info): Boolean = rawViewfinder && rawFrames != null && !inf.hiRes
 
     private fun rawRingStreams(inf: Info): Boolean = rawRingWanted && !inf.hiRes
 
@@ -905,11 +1089,13 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             }
         }
         if (rawRingStreams(inf) && !rawRingPaused) {
-            if (rawRingHandle == 0L || rawRingWidth != img.width || rawRingHeight != img.height) {
+            val cap = rawRingCapacity
+            if (rawRingHandle == 0L || rawRingWidth != img.width || rawRingHeight != img.height || rawRingAllocatedCapacity != cap) {
                 if (rawRingHandle != 0L) BurstNative.ringDestroy(rawRingHandle)
-                rawRingHandle = BurstNative.ringCreate(RAW_RING_CAPACITY, img.width, img.height)
+                rawRingHandle = BurstNative.ringCreate(cap, img.width, img.height)
                 rawRingWidth = img.width
                 rawRingHeight = img.height
+                rawRingAllocatedCapacity = cap
                 rawRingResults.clear()
             }
             BurstNative.ringPush(rawRingHandle, plane.buffer, img.width, img.height, plane.rowStride, img.timestamp)
@@ -1197,6 +1383,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
      * DngCreator writes no altitude, see DngGps).
      * One capture at a time. [flash] is ignored without a flash unit; [guides]: see [flashExposure], learned per lens
      * by the caller. [burstFrames] > 1 (without flash): that many frames, merged into the one raw ([burstDng]).
+     * For single 16-bit RAW_SENSOR stills, the raw plane is copied out and `captureLock` is released before writing
+     * the ~24 MB DNG to disk so back-to-back street shots never stall on file I/O.
      */
     suspend fun captureDng(
         exifOrientation: Int,
@@ -1204,90 +1392,213 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         flash: FlashMode = FlashMode.OFF,
         guides: FlashGuides = FlashGuides(),
         burstFrames: Int = 1,
-        /** Prefer merging frames already buffered in the continuous RAW ring buffer ([zslBurstDng]); falls back to [burstDng]. */
+        /** Prefer frames already buffered in the continuous RAW ring buffer ([zslBurstDng] or Street single-frame ZSL). */
         preferRing: Boolean = false,
         location: Location? = null,
         /** A long exposure instead of a burst ([longExposureDng]); ignored with flash or at maximum resolution. */
         longExposure: LongExposure? = null,
         /** Why the shot is a burst or not (mode, light), for the debug note; the frames actually merged are added here. */
         note: String = "",
+        /** Street mode fast single-frame capture (fast FPS ceiling, HAL ZSL, optional shutter floor & 3-frame ZSL ring). */
+        streetMode: Boolean = false,
+        /** Street mode minimum shutter speed floor ([StreetShutter.AUTO] leaves AE in charge). */
+        streetShutter: StreetShutter = StreetShutter.AUTO,
         /** A single still's exposure is over (its capture result has arrived): screen flash may go dark. */
         onExposed: () -> Unit = {},
         onSubmitted: () -> Unit = {},
-    ): Still = captureLock.withLock {
-        try {
-            val s = session ?: throw IOException("Camera not ready")
-            val inf = info ?: throw IOException("Camera not ready")
-            val reader = rawReader ?: throw IOException("Camera not ready")
-            val mode = if (inf.hasFlash) flash else FlashMode.OFF
-            // What reached the raw, judged on the frame at the shutter (a burst's or long exposure's AE moves on meanwhile).
-            // The Pixel's model keeps judging on the frame after the capture, as it was tuned.
-            val shutterEv = if (platform.still.compensation == CompensationModel.AE_GAIN_IN_RAW) appliedCompensationEv(_frames.value) else null
-            if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, shutterEv, onExposed, onSubmitted)
-            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) {
-                if (preferRing && rawRingWanted) {
-                    zslBurstDng(inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)?.let { return@withLock it }
-                }
-                return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)
-            }
-            // Ambient exposure before any light comes on: the flash still never needs more.
-            val ambient = _frames.value
-            var focused = false
-            // The platform says who exposes a flash still: the flash guide by hand (AE off), or the camera's flash AE.
-            val cameraAe = mode != FlashMode.OFF && platform.flash.metering == FlashMetering.CAMERA_AE
+    ): Still {
+        // Deferred DNG payload written after captureLock is released (for fast shot-to-shot cadence).
+        class DeferredDng(
+            val inf: Info,
+            val result: CaptureResult,
+            val width: Int,
+            val height: Int,
+            val buffer: ByteBuffer,
+            val description: String,
+            val still: Still,
+        )
+        var deferred: DeferredDng? = null
+        val immediate: Still? = captureLock.withLock {
             try {
-                if (mode == FlashMode.FOCUS_FLASH) focused = torchFocus(s, inf)
-                val diopters = _frames.value?.focusDiopters
-                val exposure = if (mode == FlashMode.OFF || cameraAe) null else flashExposure(inf, ambient, diopters, guides)
-                if (cameraAe) flashMetering(s, inf)
-                val why = when {
-                    burstFrames <= 1 -> ""
-                    inf.hiRes -> " reason=max-res"
-                    else -> " reason=flash"
+                val s = session ?: throw IOException("Camera not ready")
+                val inf = info ?: throw IOException("Camera not ready")
+                val reader = rawReader ?: throw IOException("Camera not ready")
+                val mode = if (inf.hasFlash) flash else FlashMode.OFF
+                // What reached the raw, judged on the frame at the shutter (a burst's or long exposure's AE moves on meanwhile).
+                // The Pixel's model keeps judging on the frame after the capture, as it was tuned.
+                val shutterEv = if (platform.still.compensation == CompensationModel.AE_GAIN_IN_RAW) appliedCompensationEv(_frames.value) else null
+                if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) {
+                    return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, shutterEv, onExposed, onSubmitted)
                 }
-                val description = "RawBoy merge=off frames=1 $note$why".trim()
-                synchronized(depthLock) { latestDepth = null }
-                val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, description, out, onExposed, onSubmitted)
-                val (depth, dualPixel) = depthFor(result, exifOrientation)
-                Still(
-                    result, exposure?.second, distanceKnown = diopters != null && diopters > 0f,
-                    compensationEv = when {
-                        // The flash AE has the range to put all of it (the user's and the flash's) into the raw.
-                        cameraAe -> compensationEv()
-                        exposure == null -> appliedCompensationEv(ambient)
-                        else -> 0f
-                    },
-                    description = description,
-                    depth = depth,
-                    dualPixel = dualPixel,
-                )
+                if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) {
+                    if (preferRing && rawRingWanted) {
+                        zslBurstDng(inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)?.let { return@withLock it }
+                    }
+                    return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)
+                }
+                // Ambient exposure before any light comes on: the flash still never needs more.
+                val ambient = _frames.value
+                // Street mode zero-shutter-lag single frame directly from the continuous 3-frame RAW ring.
+                if (streetMode && mode == FlashMode.OFF && !inf.hiRes && preferRing && rawRingWanted) {
+                    val grabbed = grabZslSingle(inf, streetShutter.maxExposureNs)
+                    if (grabbed != null) {
+                        onSubmitted()
+                        onExposed()
+                        val description = "RawBoy merge=zsl-single frames=1 $note".trim()
+                        val still = Still(
+                            grabbed.result, null, effectiveFrames = 1f,
+                            compensationEv = shutterEv ?: appliedCompensationEv(ambient),
+                            description = description, depth = null, dualPixel = null,
+                        )
+                        deferred = DeferredDng(inf, grabbed.result, grabbed.width, grabbed.height, grabbed.buffer, description, still)
+                        return@withLock null
+                    }
+                }
+                var focused = false
+                // The platform says who exposes a flash still: the flash guide by hand (AE off), or the camera's flash AE.
+                val cameraAe = mode != FlashMode.OFF && platform.flash.metering == FlashMetering.CAMERA_AE
+                try {
+                    if (mode == FlashMode.FOCUS_FLASH) focused = torchFocus(s, inf)
+                    val diopters = _frames.value?.focusDiopters
+                    val flashExp = if (mode == FlashMode.OFF || cameraAe) null else flashExposure(inf, ambient, diopters, guides)
+                    val streetManual = if (streetMode && mode == FlashMode.OFF && ambient != null && streetShutter.maxExposureNs != null) {
+                        val isoR = inf.isoRange
+                        val expR = inf.exposureRangeNs
+                        if (isoR != null && expR != null) {
+                            StreetExposure.compute(
+                                ambient.iso, ambient.exposureNs, streetShutter.maxExposureNs,
+                                isoR.lower, isoR.upper, expR.lower, expR.upper,
+                            )
+                        } else null
+                    } else null
+                    val manualExposure = flashExp?.first ?: streetManual
+                    if (cameraAe) flashMetering(s, inf)
+                    val why = when {
+                        burstFrames <= 1 -> ""
+                        inf.hiRes -> " reason=max-res"
+                        else -> " reason=flash"
+                    }
+                    val description = "RawBoy merge=off frames=1 $note$why".trim()
+                    synchronized(depthLock) { latestDepth = null }
+                    val captured = stillCapture(s, inf, reader, mode, manualExposure, streetMode, exifOrientation, location, description, out, onExposed, onSubmitted)
+                    val (depth, dualPixel) = depthFor(captured.result, exifOrientation)
+                    val still = Still(
+                        captured.result, flashExp?.second, distanceKnown = diopters != null && diopters > 0f,
+                        compensationEv = when {
+                            // The flash AE has the range to put all of it (the user's and the flash's) into the raw.
+                            cameraAe -> compensationEv()
+                            manualExposure == null -> appliedCompensationEv(ambient)
+                            else -> 0f
+                        },
+                        description = description,
+                        depth = depth,
+                        dualPixel = dualPixel,
+                    )
+                    if (captured.rawBuffer != null) {
+                        deferred = DeferredDng(inf, captured.result, captured.width, captured.height, captured.rawBuffer, description, still)
+                        null
+                    } else {
+                        still
+                    }
+                } finally {
+                    if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
+                }
             } finally {
-                if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
-            }
-        } finally {
-            if (readerCloseDeferred) {
-                readerCloseDeferred = false
-                rawReader?.close()
-                rawReader = null
+                if (readerCloseDeferred) {
+                    readerCloseDeferred = false
+                    rawReader?.close()
+                    rawReader = null
+                }
             }
         }
+        if (immediate != null) return immediate
+        val d = deferred!!
+        DngCreator(d.inf.characteristics, d.result).use { dng ->
+            dng.setOrientation(exifOrientation)
+            dng.setDescription(d.description)
+            location?.let(dng::setLocation)
+            dng.writeByteBuffer(out, Size(d.width, d.height), d.buffer, 0)
+        }
+        return d.still
     }
 
-    private suspend fun stillDng(
+    private class ZslSingleFrame(val result: CaptureResult, val width: Int, val height: Int, val buffer: ByteBuffer)
+
+    /**
+     * Copies the newest recent paired frame out of the continuous RAW ring buffer (~2 ms, zero sensor wait) for
+     * Street mode single-frame ZSL. Returns null if no recent paired frame is ready or if its exposure is slower
+     * than [maxExposureNs] (so [captureDng] falls back to a fresh manual-floor still).
+     */
+    private suspend fun grabZslSingle(inf: Info, maxExposureNs: Long?): ZslSingleFrame? {
+        val out = CompletableDeferred<ZslSingleFrame?>()
+        val posted = handler.post {
+            val ring = rawRingHandle
+            val w = rawRingWidth
+            val h = rawRingHeight
+            if (ring == 0L || w < 2 || h < 2) {
+                out.complete(null)
+                return@post
+            }
+            val stamps = BurstNative.ringTimestamps(ring)
+            if (stamps.isEmpty()) {
+                out.complete(null)
+                return@post
+            }
+            val newest = stamps.last()
+            var chosenTs = 0L
+            var result: CaptureResult? = null
+            for (i in stamps.lastIndex downTo 0) {
+                val ts = stamps[i]
+                if ((newest - ts) > RAW_RING_MAX_AGE_NS) break
+                val r = rawRingResults[ts]
+                if (r != null) {
+                    chosenTs = ts
+                    result = r
+                    break
+                }
+            }
+            if (chosenTs == 0L || result == null) {
+                out.complete(null)
+                return@post
+            }
+            val expNs = result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L
+            if (maxExposureNs != null && expNs > maxExposureNs) {
+                Log.d(TAG, "street zsl: ring frame exposure ${expNs / 1000} µs > floor ${maxExposureNs / 1000} µs; taking fresh still")
+                out.complete(null)
+                return@post
+            }
+            val buf = ByteBuffer.allocateDirect(w * h * 2)
+            val copied = BurstNative.ringCopyFrame(ring, chosenTs, buf)
+            if (copied == 0L) {
+                out.complete(null)
+                return@post
+            }
+            buf.position(0)
+            Log.d(TAG, "street zsl: grabbed ${w}x${h} frame (${expNs / 1000} µs, ISO ${result.get(CaptureResult.SENSOR_SENSITIVITY)})")
+            out.complete(ZslSingleFrame(result, w, h, buf))
+        }
+        if (!posted) return null
+        return out.await()
+    }
+
+    private class CapturedStill(val result: CaptureResult, val width: Int, val height: Int, val rawBuffer: ByteBuffer?)
+
+    private suspend fun stillCapture(
         s: CameraCaptureSession,
         inf: Info,
         reader: ImageReader,
         flash: FlashMode,
-        /** Manual (exposure ns, ISO) for a flash still, or null for AE's. */
+        /** Manual (exposure ns, ISO) for a flash still or Street shutter floor, or null for AE's. */
         manual: Pair<Long, Int>?,
+        streetMode: Boolean,
         exifOrientation: Int,
         location: Location?,
         description: String,
         out: OutputStream,
         onExposed: () -> Unit,
         onSubmitted: () -> Unit,
-    ): CaptureResult = captureOne(s, stillRequest(s, inf, reader, flash, manual), onSubmitted, onExposed) { captureResult, img ->
-        Log.d(TAG, "still (flash $flash${manual?.let { ", manual ${it.first / 1000} µs ISO ${it.second}" } ?: ""}, state ${captureResult.get(CaptureResult.FLASH_STATE)}, AE ${captureResult.get(CaptureResult.CONTROL_AE_STATE)}): ${(captureResult.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L) / 1000} µs, ISO " +
+    ): CapturedStill = captureOne(s, stillRequest(s, inf, reader, flash, manual, streetMode), onSubmitted, onExposed) { captureResult, img ->
+        Log.d(TAG, "still (flash $flash${if (streetMode) " street" else ""}${manual?.let { ", manual ${it.first / 1000} µs ISO ${it.second}" } ?: ""}, state ${captureResult.get(CaptureResult.FLASH_STATE)}, AE ${captureResult.get(CaptureResult.CONTROL_AE_STATE)}): ${(captureResult.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L) / 1000} µs, ISO " +
             "${captureResult.get(CaptureResult.SENSOR_SENSITIVITY)}, boost ${captureResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}, " +
             "black ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.joinToString()} " +
             "(static ${inf.characteristics.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)}), " +
@@ -1296,19 +1607,39 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         // The lens's own characteristics and result: colour matrices, shading map and sizes are per lens.
         if (inf.hiRes || img.format == ImageFormat.RAW10) {
             MaxResDngWriter.write(inf.characteristics, captureResult, img, exifOrientation, location, description, out)
+            CapturedStill(captureResult, img.width, img.height, null)
         } else {
-            DngCreator(inf.characteristics, captureResult).use { dng ->
-                dng.setOrientation(exifOrientation)
-                dng.setDescription(description)
-                location?.let(dng::setLocation)
-                dng.writeImage(out, img)
+            // Copy raw pixels out (~2-3 ms) and release the Image + captureLock before the ~200 ms DngCreator disk write.
+            CapturedStill(captureResult, img.width, img.height, copyRawPlane(img))
+        }
+    }
+
+    /** Copies a 16-bit `RAW_SENSOR` [Image] into a tightly packed direct [ByteBuffer] so [Image] can close immediately. */
+    private fun copyRawPlane(img: Image): ByteBuffer {
+        val w = img.width
+        val h = img.height
+        val plane = img.planes[0]
+        val rowBytes = w * 2
+        val stride = plane.rowStride
+        val src = plane.buffer.duplicate()
+        val dst = ByteBuffer.allocateDirect(rowBytes * h)
+        if (stride == rowBytes) {
+            src.position(0)
+            src.limit(rowBytes * h)
+            dst.put(src)
+        } else {
+            for (y in 0 until h) {
+                src.position(y * stride)
+                src.limit(y * stride + rowBytes)
+                dst.put(src)
             }
         }
-        captureResult
+        dst.position(0)
+        return dst
     }
 
     /**
-     * The still request (raw + preview targets, AE as the shot uses it), shared by the shutter ([stillDng]) and the
+     * The still request (raw + preview targets, AE as the shot uses it), shared by the shutter ([stillCapture]) and the
      * viewfinder's raw metering ([meterRaw]), so a metered frame is exposed exactly like a photo.
      */
     private fun stillRequest(
@@ -1317,6 +1648,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         reader: ImageReader,
         flash: FlashMode,
         manual: Pair<Long, Int>?,
+        streetMode: Boolean = false,
     ): CaptureRequest = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
         addTarget(reader.surface)
         depthReader?.let { addTarget(it.surface) }
@@ -1325,9 +1657,21 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         setCommon(inf)
         if (inf.hiRes) setMaxResolution(inf)
         if (flash == FlashMode.OFF) {
-            // Low light: the preview is held at 30 fps for a smooth viewfinder; let AE give the still the longer
-            // exposure it used to choose (its full range down to 15 fps).
-            inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+            if (manual != null) {
+                // Street mode minimum shutter floor: lock manual exposure/ISO to freeze motion.
+                set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
+                set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
+                setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, manual.first)
+                setForLens(CaptureRequest.SENSOR_SENSITIVITY, manual.second)
+                setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
+            } else if (streetMode) {
+                // Street mode AE: keep the 30 fps preview floor (never drop to 1/15 s) and enable HAL ZSL.
+                set(CaptureRequest.CONTROL_ENABLE_ZSL, true)
+            } else {
+                // Low light: the preview is held at 30 fps for a smooth viewfinder; let AE give the still the longer
+                // exposure it used to choose (its full range down to 15 fps).
+                inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+            }
         } else {
             // The flash freezes the subject; a longer ambient exposure would only add blur around it. And never a
             // zero-shutter-lag frame from before the flash.
@@ -2195,9 +2539,10 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     }
 
     /** Closes the camera (on pause, after any in-flight capture); [start] opens it again. */
-    fun stop() = stop(alreadyLocked = false)
+    fun stop() = stop(alreadyLocked = false, keepPreopenId = null)
 
-    private fun stop(alreadyLocked: Boolean) {
+    private fun stop(alreadyLocked: Boolean, keepPreopenId: String? = null) {
+        synchronized(preopenLock) { cancelPreopenLocked(keepPreopenId) }
         aeMode = CameraMetadata.CONTROL_AE_MODE_ON
         flashMode = CameraMetadata.FLASH_MODE_OFF
         runCatching { session?.close() }
@@ -2256,6 +2601,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
         inf.previewFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
         val lock = focusPoint
+        val snapDiopters = if (lock == null) snapFocus.diopters(inf.hyperfocalDiopters, inf.minFocusDiopters) else null
         if (lock != null) {
             // Focus lock: AUTO holds the focus the trigger found, also for captures; meter there too. A tracked
             // subject moves in depth as well, so continuous AF keeps focusing on it there.
@@ -2264,6 +2610,13 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 if (tracking) CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE else CameraMetadata.CONTROL_AF_MODE_AUTO,
             )
             setRegions(inf, lock)
+        } else if (snapDiopters != null) {
+            // Street Snap Focus: manual focus at the preset diopter distance (0 ms focus lag).
+            set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF)
+            setForLens(CaptureRequest.LENS_FOCUS_DISTANCE, snapDiopters)
+            if ((characteristicsOf(inf).get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0) > 0) {
+                set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(centreRegion(inf)))
+            }
         } else {
             set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)
             // Meter the middle half of the frame (width and height), as the auto develop does.
@@ -2518,8 +2871,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         /** A burst waits this long plus [BURST_FRAME_TIMEOUT_MS] per frame for its frames, then merges what came. */
         private const val BURST_TIMEOUT_MS = 2000L
         private const val BURST_FRAME_TIMEOUT_MS = 250L
-        /** Continuous RAW ring buffer (experimental ZSL burst): capacity, result history, minimum paired frames, max span. */
-        private const val RAW_RING_CAPACITY = 8
+        /** Continuous RAW ring buffer: capacity (8 for burst merge, 3 for lightweight Street single-frame ZSL). */
+        const val RAW_RING_CAPACITY = 8
+        const val STREET_RING_CAPACITY = 3
         private const val RAW_RING_RESULT_LIMIT = 16
         private const val RAW_RING_MIN_FRAMES = 2
         private const val RAW_RING_MAX_AGE_NS = 1_500_000_000L

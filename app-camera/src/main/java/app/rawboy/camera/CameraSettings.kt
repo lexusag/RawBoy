@@ -139,6 +139,26 @@ data class CameraSettings(
      */
     val easyMono: Boolean = false,
     /**
+     * Street mode: fast-start pocket camera using Easy mode's Colour / B&W look, single-frame / ZSL capture,
+     * Snap Focus (zone focus), and minimum shutter speed floor. Stored settings keep their values while on: see [effectiveFor].
+     */
+    val street: Boolean = false,
+    /**
+     * Launching RawBoy Camera via a double press of the power button (`STILL_IMAGE_CAMERA` / `STILL_IMAGE_CAMERA_SECURE`)
+     * enters Street mode automatically for that session. On by default.
+     */
+    val streetOnPowerLaunch: Boolean = true,
+    /** Street mode's Colour / B&W switch (same Easy-mode default film / mono stocks, kept separate from [mono] and [easyMono]). */
+    val streetMono: Boolean = false,
+    /** Street mode's zone focus preset (AF, 1.5 m, 2.5 m, 5 m, or hyperfocal/infinity). */
+    val streetSnapFocus: app.rawboy.camera.capture.SnapFocus = app.rawboy.camera.capture.SnapFocus.AF,
+    /** Street mode's minimum shutter speed target (Auto 1/30 s ceiling, or 1/125, 1/250, 1/500). */
+    val streetShutter: app.rawboy.camera.capture.StreetShutter = app.rawboy.camera.capture.StreetShutter.AUTO,
+    /** Street mode: tapping anywhere on the viewfinder shoots immediately instead of locking focus. */
+    val streetTapToShoot: Boolean = false,
+    /** Street mode: lightweight 3-frame continuous RAW ring buffer (~65 MB RAM) for 0 ms shutter lag on supported phones. */
+    val streetZsl: Boolean = true,
+    /**
      * Experimental: videos record the whole 4:3 frame and save a `.motion` file of gyroscope and frame data beside it
      * (MotionRecording), to stabilize them afterwards.
      */
@@ -304,40 +324,70 @@ data class CameraSettings(
         } else null
 
     /**
-     * The settings that take part: these, or in [easy] mode these with everything the easy screen has no control for
-     * set to what a plain point-and-shoot does (no light leak or Brightness/Warmth offset; merging on
-     * Auto; no timer, long exposure, subject tracking, flat video or motion data; no histogram, grid, level or zoom
-     * buttons, which also spares their per-frame work). The look is Film mode's default stock at the default Strength,
-     * or with [easyMono] Film + B&W on the default mono stock and filter (owner's choice, 2026-11-22). RAW and Frames keep
-     * their top bar buttons and values (owner's choice). Photo size,
-     * quality, HDR gain map, grain, QR codes, lens, flash and the sensor modes (max resolution, raw viewfinder) stay as
-     * set. The stored values are untouched, so leaving easy mode brings them all back.
+     * The settings that take part: these, or in Street mode ([streetActive]) / [easy] mode these with everything the
+     * simplified screen has no control for set to fast defaults while keeping stored settings untouched.
+     * Street mode takes precedence when active (e.g. an ephemeral power-button double-press launch): Easy-mode Colour /
+     * B&W stocks, single-frame capture (`BurstMode.OFF`), flash OFF, no QR/histogram/depth/portrait/HDR/max-res/timer/
+     * long-exposure/tracking/video-motion, while keeping grid, level, RAW, frames, size, quality, grain, and lens.
      */
-    val effective: CameraSettings get() = if (!easy) this else copy(
-        film = true,
-        filmLookId = Edition.defaultFilmLookId,
-        mono = easyMono,
-        monoLookId = Edition.defaultMonoLookId,
-        filter = BwFilter.YELLOW,
-        strength = LookApplier.DEFAULT_STRENGTH,
-        brightness = 0f,
-        warmth = 0f,
-        burstMode = BurstMode.AUTO,
-        selfTimer = 0,
-        longExposure = 0,
-        experimental = false,
-        randomLightLeak = false,
-        trackFocus = false,
-        flatVideo = false,
-        videoMotionData = false,
-        zslBurst = false,
-        saveDepth = false,
-        depthPortrait = false,
-        showHistogram = false,
-        showGrid = false,
-        showLevel = false,
-        showZoomControl = false,
-    )
+    fun effectiveFor(streetActive: Boolean): CameraSettings = when {
+        streetActive -> copy(
+            film = true,
+            filmLookId = Edition.defaultFilmLookId,
+            mono = streetMono,
+            monoLookId = Edition.defaultMonoLookId,
+            filter = BwFilter.YELLOW,
+            strength = LookApplier.DEFAULT_STRENGTH,
+            brightness = 0f,
+            warmth = 0f,
+            burstMode = BurstMode.OFF,
+            flash = FlashMode.OFF,
+            maxRes = false,
+            selfTimer = 0,
+            longExposure = 0,
+            experimental = false,
+            randomLightLeak = false,
+            hdrGainMap = false,
+            scanQr = false,
+            trackFocus = false,
+            flatVideo = false,
+            videoMotionData = false,
+            rawViewfinder = false,
+            zslBurst = false,
+            saveDepth = false,
+            depthPortrait = false,
+            showHistogram = false,
+            showZoomControl = false,
+        )
+        easy -> copy(
+            film = true,
+            filmLookId = Edition.defaultFilmLookId,
+            mono = easyMono,
+            monoLookId = Edition.defaultMonoLookId,
+            filter = BwFilter.YELLOW,
+            strength = LookApplier.DEFAULT_STRENGTH,
+            brightness = 0f,
+            warmth = 0f,
+            burstMode = BurstMode.AUTO,
+            selfTimer = 0,
+            longExposure = 0,
+            experimental = false,
+            randomLightLeak = false,
+            trackFocus = false,
+            flatVideo = false,
+            videoMotionData = false,
+            zslBurst = false,
+            saveDepth = false,
+            depthPortrait = false,
+            showHistogram = false,
+            showGrid = false,
+            showLevel = false,
+            showZoomControl = false,
+        )
+        else -> this
+    }
+
+    val effective: CameraSettings get() = effectiveFor(street)
 
     /** Save a standalone developed JPEG (always on when RAW is off; optional when RAW is on). */
     val saveJpeg: Boolean get() = !keepDng || rawWithJpeg
@@ -469,6 +519,13 @@ object CameraSettingsStore {
             experimental = p.getBoolean("experimental", d.experimental),
             easy = p.getBoolean("easy", d.easy),
             easyMono = p.getBoolean("easyMono", d.easyMono),
+            street = p.getBoolean("street", d.street),
+            streetOnPowerLaunch = p.getBoolean("streetOnPowerLaunch", d.streetOnPowerLaunch),
+            streetMono = p.getBoolean("streetMono", d.streetMono),
+            streetSnapFocus = runCatching { app.rawboy.camera.capture.SnapFocus.valueOf(p.getString("streetSnapFocus", null)!!) }.getOrDefault(d.streetSnapFocus),
+            streetShutter = runCatching { app.rawboy.camera.capture.StreetShutter.valueOf(p.getString("streetShutter", null)!!) }.getOrDefault(d.streetShutter),
+            streetTapToShoot = p.getBoolean("streetTapToShoot", d.streetTapToShoot),
+            streetZsl = p.getBoolean("streetZsl", d.streetZsl),
             videoMotionData = p.getBoolean("videoMotionData", d.videoMotionData),
             rawViewfinder = p.getBoolean("rawViewfinder", d.rawViewfinder),
             zslBurst = p.getBoolean("zslBurst", d.zslBurst),
@@ -562,6 +619,13 @@ object CameraSettingsStore {
             .putBoolean("experimental", s.experimental)
             .putBoolean("easy", s.easy)
             .putBoolean("easyMono", s.easyMono)
+            .putBoolean("street", s.street)
+            .putBoolean("streetOnPowerLaunch", s.streetOnPowerLaunch)
+            .putBoolean("streetMono", s.streetMono)
+            .putString("streetSnapFocus", s.streetSnapFocus.name)
+            .putString("streetShutter", s.streetShutter.name)
+            .putBoolean("streetTapToShoot", s.streetTapToShoot)
+            .putBoolean("streetZsl", s.streetZsl)
             .putBoolean("videoMotionData", s.videoMotionData)
             .putBoolean("rawViewfinder", s.rawViewfinder)
             .putBoolean("zslBurst", s.zslBurst)

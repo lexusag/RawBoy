@@ -312,6 +312,24 @@ for handing the phone to someone who just wants photos.
 - **Settings** then shows only Language, Easy mode, Shutter sound, Geotag and QR codes (and the licences).
 - Lighter as well: no histogram or level work, no tracking copies.
 
+## Street mode and fast start (Android)
+
+Double-pressing the power button (with RawBoy Camera set as the default camera) opens straight into **Street mode** — a pocket-ready single-frame camera built to launch momentarily and shoot without focus or burst-merge lag. It can also be opened from a pinned **Street** app shortcut, the **RawBoy Street** Quick Settings tile, or **Settings › Street mode** (and power-button activation can be switched off under **Settings › Power double-press opens Street**).
+
+- **Instant start (all modes):**
+  - **Cached lens fast-open** (`FastLensCache`): persists the target lens descriptor keyed by `Build.FINGERPRINT` so startup opens the camera in 1–2 IPCs instead of waiting ~1.7 s for full multi-camera discovery; remaining lenses, selfie camera, max-res MP and depth capabilities populate asynchronously after the camera is `READY`.
+  - **Early camera open & LUT preload:** `CameraActivity.onCreate` calls `CameraController.preopen` and preloads the active film stock / LUT into RAM in parallel with Compose layout and EGL setup.
+  - **Binary GL shader cache & instant frame-0 preview:** `GlProgramCache` persists linked GLES 3.0 binaries (`glProgramBinary`) across launches and lazily compiles optional shaders (`RawLinearize`, `Luma`, `Turn`, `Flat`, `Develop`). A tiny `FastPreviewProgram` draws the live camera frame on frame 0 (colour or monochrome) while the full look warms up, removing the black spinner.
+  - **Queued early shutter:** pressing the shutter or a volume key while the camera is still opening queues one shot and fires automatically as soon as the first frame arrives.
+  - **Off-lock DNG write & ART Baseline Profile:** single-frame 16-bit RAW captures copy the sensor plane and release `captureLock` before writing the ~24 MB DNG to disk; `baseline-prof.txt` pre-compiles the launch path.
+  - **Startup telemetry:** logcat tag `RawBoyStartup` logs monotonic `+ms` milestones from `onCreate` through `firstVisibleFrame`, `firstLookFrame` and shutter capture.
+- **Street mode controls:**
+  - Uses Easy mode's **Colour / B&W** look (default colour film stock, or Film + B&W on the default mono stock), a 96 dp shutter, live shutter/ISO readout, and disables Photo/Video swipes, flash, burst merging, QR scanning, histogram, depth/portrait, HDR gain map and max-res without changing the stored full-camera settings. Tapping the amber **STREET** badge in the top bar switches straight to the full camera.
+  - **Snap focus (zone focus):** `AF`, `1.5m`, `2.5m`, `5m`, `∞` (using `LENS_INFO_HYPERFOCAL_DISTANCE` where reported; `Near / Mid / Far / ∞` on uncalibrated lenses) sets `CONTROL_AF_MODE_OFF` + `LENS_FOCUS_DISTANCE` for 0 ms focus lag. Tapping the viewfinder still focuses temporarily (`AF LOCK ✕` returns to Snap focus).
+  - **Min shutter speed:** `Auto` (30 fps preview floor instead of dropping to 1/15 s), `1/125`, `1/250`, or `1/500`, raising ISO to freeze motion and relaxing exposure cleanly if ISO hits sensor ceiling.
+  - **Instant capture (ZSL):** lightweight 3-frame continuous RAW ring buffer (~65 MB RAM) on phones that support RAW streaming (`PreviewProfile.rawViewfinder`), with `CONTROL_ENABLE_ZSL = true` on other phones, plus shoot-priority `ShotSaver` pacing so rapid bursts don't contend with LibRaw decode (flushed immediately on pause/lock).
+  - **Tap viewfinder to shoot** (optional): tap anywhere on the frame to take a photo immediately.
+
 ## Self-timer and long exposure (Android prototype)
 
 Both are behind **Settings › Experimental features** (off by default); with it on, two buttons join the Photo / Video switch under the viewfinder (Timer left of it, Long exposure right; they hide in video mode). They are meant for a tripod.

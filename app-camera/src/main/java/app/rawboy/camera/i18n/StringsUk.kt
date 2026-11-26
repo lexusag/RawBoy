@@ -579,4 +579,46 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Надіслати дані для налаштування",
     "No app to share the file with" to
         "Немає застосунку, щоб надіслати файл",
+    "STREET" to
+        "ВУЛИЦЯ",
+    "Switch to full camera" to
+        "Перейти до повної камери",
+    "Street mode" to
+        "Вуличний режим",
+    "Instant pocket camera: Colour or B&W, Snap Focus, single-frame ZSL" to
+        "Миттєва кишенькова камера: Колір або Ч/Б, Snap Focus, миттєвий ZSL-кадр",
+    "Power double-press opens Street" to
+        "Подвійне натискання живлення відкриває вуличний режим",
+    "Double-pressing the power button launches straight into Street mode" to
+        "Подвійне натискання кнопки живлення одразу запускає вуличний режим",
+    "Snap focus" to
+        "Зонний фокус (Snap Focus)",
+    "Fixed zone focus distance for 0 ms focus lag; AF uses continuous autofocus" to
+        "Фіксована відстань фокусування без затримки; AF — неперервний автофокус",
+    "Approximate zone focus (this lens is uncalibrated); AF uses continuous autofocus" to
+        "Приблизний зонний фокус (об'єктив не калібрований); AF — неперервний автофокус",
+    "Near" to
+        "Близько",
+    "Mid" to
+        "Середньо",
+    "Far" to
+        "Далеко",
+    "Min shutter speed" to
+        "Мін. витримка",
+    "Freezes moving street subjects by raising ISO when light drops" to
+        "Заморожує рухомих людей, підвищуючи ISO при нестачі світла",
+    "Tap viewfinder to shoot" to
+        "Торкання видошукача знімає",
+    "Tap anywhere on the frame to shoot; off taps to focus" to
+        "Торкніться будь-де на кадрі для знімка; вимк. — фокусування торканням",
+    "Instant capture (ZSL)" to
+        "Миттєвий кадр (ZSL)",
+    "Zero-shutter-lag 3-frame RAW buffer (~65 MB RAM)" to
+        "Буфер на 3 RAW-кадри без затримки затвора (~65 МБ ОЗП)",
+    "3 × 3 lines over the viewfinder" to
+        "Сітка 3 × 3 поверх видошукача",
+    "Horizon line over the viewfinder" to
+        "Лінія горизонту поверх видошукача",
+    "Double-press the power button (with RawBoy Camera as the default camera), use the Street shortcut or Quick Settings tile, or turn on Settings › Street mode. Starts momentarily with Easy mode's Colour or B&W look, Snap Focus (AF, 1.5m, 2.5m, 5m or ∞ for zero focus lag), minimum shutter speed floor, single-frame ZSL and an oversized shutter. Tap the amber STREET badge to switch to the full camera." to
+        "Двічі натисніть кнопку живлення (якщо RawBoy Camera — камера за замовчуванням), скористайтеся ярликом «Вулиця», плиткою швидких налаштувань або увімкніть Налаштування › Вуличний режим. Запускається миттєво з виглядом Колір або Ч/Б, зонним фокусом Snap Focus (AF, 1.5m, 2.5m, 5m або ∞ без затримки фокусування), мінімальною витримкою, миттєвим ZSL-кадром і великою кнопкою затвора. Торкніться бурштинового значка ВУЛИЦЯ, щоб перейти до повної камери.",
 )
