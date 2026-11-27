@@ -148,6 +148,11 @@ data class CameraSettings(
      * enters Street mode automatically for that session. On by default.
      */
     val streetOnPowerLaunch: Boolean = true,
+    /**
+     * Which camera opens on a double press of the power button (`STILL_IMAGE_CAMERA` / `STILL_IMAGE_CAMERA_SECURE`):
+     * the back main `W` lens by default, another selected camera/lens, or [PowerLaunchCamera.Last] ("Last opened").
+     */
+    val powerLaunchCamera: PowerLaunchCamera = PowerLaunchCamera.DEFAULT,
     /** Street mode's Colour / B&W switch (same Easy-mode default film / mono stocks, kept separate from [mono] and [easyMono]). */
     val streetMono: Boolean = false,
     /** Street mode's zone focus preset (AF, 1.5 m, 2.5 m, 5 m, or hyperfocal/infinity). */
@@ -534,6 +539,7 @@ object CameraSettingsStore {
             easyMono = p.getBoolean("easyMono", d.easyMono),
             street = p.getBoolean("street", d.street),
             streetOnPowerLaunch = p.getBoolean("streetOnPowerLaunch", d.streetOnPowerLaunch),
+            powerLaunchCamera = PowerLaunchCamera.parse(p.getString("powerLaunchCamera", null)),
             streetMono = p.getBoolean("streetMono", d.streetMono),
             streetSnapFocus = runCatching { app.rawboy.camera.capture.SnapFocus.valueOf(p.getString("streetSnapFocus", null)!!) }.getOrDefault(d.streetSnapFocus),
             streetShutter = runCatching { app.rawboy.camera.capture.StreetShutter.valueOf(p.getString("streetShutter", null)!!) }.getOrDefault(d.streetShutter),
@@ -574,6 +580,26 @@ object CameraSettingsStore {
         // A black and white look picked before RawBoy Camera had B&W mode now opens that mode on it.
         if (Edition.monoLooks.none { it.id == remembered.lookId }) return remembered
         return remembered.copy(mono = true, monoLookId = remembered.lookId, lookId = d.lookId)
+    }
+
+    /**
+     * Last camera `(front, lens)` persisted by [save] or [saveLastCamera], regardless of [CameraSettings.rememberLast].
+     * Used when [CameraSettings.powerLaunchCamera] is [PowerLaunchCamera.Last] on a cold start.
+     */
+    @Synchronized
+    fun lastCamera(context: Context): Pair<Boolean, String> {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val d = CameraSettings()
+        return p.getBoolean("front", d.front) to (p.getString("lens", d.lens) ?: d.lens)
+    }
+
+    /** Records the last opened `(front, lens)` when it changed, for [PowerLaunchCamera.Last] on cold starts. */
+    @Synchronized
+    fun saveLastCamera(context: Context, front: Boolean, lens: String) {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val d = CameraSettings()
+        if (p.getBoolean("front", d.front) == front && (p.getString("lens", d.lens) ?: d.lens) == lens) return
+        p.edit().putBoolean("front", front).putString("lens", lens).apply()
     }
 
     /**
@@ -634,6 +660,7 @@ object CameraSettingsStore {
             .putBoolean("easyMono", s.easyMono)
             .putBoolean("street", s.street)
             .putBoolean("streetOnPowerLaunch", s.streetOnPowerLaunch)
+            .putString("powerLaunchCamera", s.powerLaunchCamera.serialize())
             .putBoolean("streetMono", s.streetMono)
             .putString("streetSnapFocus", s.streetSnapFocus.name)
             .putString("streetShutter", s.streetShutter.name)
@@ -871,4 +898,80 @@ enum class RawPreview(val label: String, val maxLongSide: Int?) {
     /** Pure RAW: no embedded processed preview; skips develop when [CameraSettings.rawWithJpeg] is off. */
     NONE("Pure RAW", null),
 }
+
+/**
+ * Which camera opens when RawBoy Camera is launched via a power-button double press
+ * (`STILL_IMAGE_CAMERA` / `STILL_IMAGE_CAMERA_SECURE`).
+ *
+ * Defaults to the back main (`W`) lens; can be switched to [Last] ("Last opened") or any specific lens on the phone.
+ */
+sealed class PowerLaunchCamera {
+    /** Reopen whichever camera and lens were last opened. */
+    data object Last : PowerLaunchCamera()
+
+    /** Always open a specific camera ([front] = selfie vs back) and [lens] label (`UW`, `W`, `T`, …). */
+    data class Lens(val front: Boolean, val lens: String) : PowerLaunchCamera()
+
+    fun serialize(): String = when (this) {
+        Last -> LAST_KEY
+        is Lens -> if (front) "F:$lens" else "B:$lens"
+    }
+
+    companion object {
+        private const val LAST_KEY = "LAST"
+
+        /** Default fixed camera: back main wide lens (`W`). */
+        val DEFAULT_LENS: Lens = Lens(front = false, lens = "W")
+
+        /** Default setting value: open the back `W` camera on power-button double press. */
+        val DEFAULT: PowerLaunchCamera = DEFAULT_LENS
+
+        fun parse(text: String?): PowerLaunchCamera {
+            if (text.isNullOrEmpty()) return DEFAULT
+            if (text == LAST_KEY) return Last
+            if (text.length > 2 && text[1] == ':') {
+                val label = text.substring(2)
+                return when (text[0]) {
+                    'B' -> Lens(front = false, lens = label)
+                    'F' -> Lens(front = true, lens = label)
+                    else -> DEFAULT
+                }
+            }
+            return DEFAULT
+        }
+
+        /** Resolves [choice] to `(front, lens)` given the last opened camera `(lastFront, lastLens)`. */
+        fun resolve(choice: PowerLaunchCamera, lastFront: Boolean, lastLens: String): Pair<Boolean, String> =
+            when (choice) {
+                Last -> lastFront to lastLens
+                is Lens -> choice.front to choice.lens
+            }
+
+        /**
+         * Builds the selectable camera list for Settings (back lenses widest-first, then front lenses), always
+         * including `W` if back lenses have not been discovered yet and keeping [selected] visible if it is a [Lens].
+         */
+        fun optionsFor(
+            backLenses: List<String>,
+            frontLenses: List<String>,
+            selected: PowerLaunchCamera = DEFAULT,
+        ): List<Lens> {
+            val out = ArrayList<Lens>(backLenses.size + frontLenses.size + 1)
+            val backs = backLenses.ifEmpty { listOf("W") }
+            for (l in backs) {
+                val item = Lens(front = false, lens = l)
+                if (item !in out) out += item
+            }
+            for (l in frontLenses) {
+                val item = Lens(front = true, lens = l)
+                if (item !in out) out += item
+            }
+            if (selected is Lens && selected !in out) {
+                out += selected
+            }
+            return out
+        }
+    }
+}
+
 

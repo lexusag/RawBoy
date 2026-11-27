@@ -187,6 +187,7 @@ import app.rawboy.camera.CameraSettings
 import app.rawboy.camera.CameraStatus
 import app.rawboy.camera.CameraViewModel
 import app.rawboy.camera.Edition
+import app.rawboy.camera.PowerLaunchCamera
 import app.rawboy.view.LicensesDialog
 import app.rawboy.view.CompactSlider
 import app.rawboy.view.HelpButton
@@ -1816,6 +1817,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
     val dualPixel by vm.dualPixelAvailable.collectAsState()
     val street by vm.streetActive.collectAsState()
     val focusCalibrated by vm.focusCalibrated.collectAsState()
+    val powerLaunchLenses by vm.powerLaunchLenses.collectAsState()
+    var lastPickedPowerCamera by remember {
+        mutableStateOf((settings.powerLaunchCamera as? PowerLaunchCamera.Lens) ?: PowerLaunchCamera.DEFAULT_LENS)
+    }
+    if (settings.powerLaunchCamera is PowerLaunchCamera.Lens) {
+        lastPickedPowerCamera = settings.powerLaunchCamera
+    }
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
         FramesSettingsContent(settings, vm, onBack = { showFrames = false })
@@ -1860,6 +1868,37 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             checked = settings.streetOnPowerLaunch,
             onChange = vm::setStreetOnPowerLaunch,
         )
+        SettingChoice(
+            title = "Power double-press camera",
+            subtitle = "Which camera opens on a power-button double press",
+            options = listOf(false, true),
+            selected = settings.powerLaunchCamera is PowerLaunchCamera.Last,
+            label = { if (it) "Last opened" else "Selected camera" },
+            onSelect = { useLast ->
+                vm.setPowerLaunchCamera(if (useLast) PowerLaunchCamera.Last else lastPickedPowerCamera)
+            },
+        )
+        if (settings.powerLaunchCamera is PowerLaunchCamera.Lens) {
+            val (backLenses, frontLenses) = powerLaunchLenses
+            val cameraOptions = PowerLaunchCamera.optionsFor(backLenses, frontLenses, settings.powerLaunchCamera)
+            val multipleFront = cameraOptions.count { it.front } > 1
+            SettingChoice(
+                title = "Camera",
+                subtitle = null,
+                options = cameraOptions,
+                selected = settings.powerLaunchCamera,
+                label = { cam ->
+                    when {
+                        !cam.front -> cam.lens
+                        multipleFront -> tr("Selfie %s", cam.lens)
+                        else -> "Selfie"
+                    }
+                },
+                onSelect = vm::setPowerLaunchCamera,
+                indent = true,
+                scrollable = cameraOptions.size > 5,
+            )
+        }
 
         if (street) {
             SettingChoice(
@@ -2594,30 +2633,36 @@ private fun <T> SettingChoice(
     onSelect: (T) -> Unit,
     indent: Boolean = false,
     enabled: Boolean = true,
+    scrollable: Boolean = false,
 ) {
     Column(Modifier.padding(start = if (indent) 16.dp else 0.dp, top = 8.dp, bottom = 8.dp)) {
         Text(tr(title), style = MaterialTheme.typography.bodyMedium)
         if (subtitle != null) {
             Text(tr(subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Row(
-            Modifier
-                .padding(top = 8.dp)
-                .fillMaxWidth()
-                .alpha(if (enabled) 1f else 0.38f)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
-        ) {
+        val rowModifier = Modifier
+            .padding(top = 8.dp)
+            .fillMaxWidth()
+            .alpha(if (enabled) 1f else 0.38f)
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .let { if (scrollable) it.horizontalScroll(rememberScrollState()) else it }
+        Row(rowModifier) {
             for (o in options) {
                 val on = o == selected
+                val itemModifier = if (scrollable) {
+                    Modifier.widthIn(min = 52.dp)
+                } else {
+                    Modifier.weight(1f)
+                }
                 Box(
-                    Modifier
-                        .weight(1f)
+                    itemModifier
                         .heightIn(min = 40.dp)
                         .padding(2.dp)
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
                         .clickable(enabled = enabled) { onSelect(o) }
+                        .padding(horizontal = if (scrollable) 12.dp else 0.dp)
                         .semantics { stateDescription = if (on) tr("Selected") else tr("Not selected") },
                     contentAlignment = Alignment.Center,
                 ) {

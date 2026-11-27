@@ -1,6 +1,7 @@
 package app.rawboy.camera.capture
 
 import android.content.Context
+import android.hardware.camera2.CameraMetadata
 import android.os.Build
 
 /**
@@ -104,6 +105,24 @@ object FastLensCache {
         if (prefs.getInt(KEY_SCHEMA, 0) != SCHEMA_VERSION) return null
         if (prefs.getString(KEY_FINGERPRINT, null) != currentFingerprint()) return null
         return FastLensEntry.parse(prefs.getString(slotKey(front, lens, maxRes), null))
+    }
+
+    /** Returns all cached lenses for [maxRes] grouped by `front` (widest first), or empty if cache is cold/stale. */
+    fun loadAll(context: Context, maxRes: Boolean): Map<Boolean, List<FastLensEntry>> {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getInt(KEY_SCHEMA, 0) != SCHEMA_VERSION) return emptyMap()
+        if (prefs.getString(KEY_FINGERPRINT, null) != currentFingerprint()) return emptyMap()
+        val suffix = "_${if (maxRes) "H" else "N"}"
+        val back = mutableListOf<FastLensEntry>()
+        val front = mutableListOf<FastLensEntry>()
+        for ((key, value) in prefs.all) {
+            if (!key.startsWith("lens_") || !key.endsWith(suffix)) continue
+            val entry = FastLensEntry.parse(value as? String) ?: continue
+            if (entry.facing == CameraMetadata.LENS_FACING_FRONT) front += entry else back += entry
+        }
+        back.sortBy { it.equivalentFocal }
+        front.sortBy { it.equivalentFocal }
+        return mapOf(false to back, true to front)
     }
 
     fun saveAll(
