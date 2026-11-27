@@ -30,6 +30,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Digital zoom up to 10× | 1.10.1 | ✓ | — | Compact zoom control 1.10.2, can be hidden 1.10.3 |
 | Tap to focus and meter | ≤1.1.1 | ✓ | ✓ | More precise ring (5% square) 1.5.3; iOS 26 needed for the small square |
 | AF LOCK, drag the ring with a 3× loupe | 1.5.3 | ✓ | ✓ | |
+| **AE/WB LOCK** (exposure + white balance lock in photo and video modes, independent of focus lock) | 1.10.7 (video AE); unreleased (WB + photo mode) | ✓ | ✓ | Locks camera AE + AWB (`CONTROL_AE_LOCK` + `CONTROL_AWB_LOCK` on Android; `exposureMode` + `whiteBalanceMode` `.locked` on iOS) and holds the live/shot develop exposure so recomposing does not re-meter it |
 | **Track the subject after a tap** (off by default) | 1.6.0 | ✓ | ✓ | `PatternTracker` shared; iOS untested on the phone when added |
 | Brightness slider that also sets exposure compensation | 1.6.2 | ✓ | ✓ | Brightness holds in low light: 1.7.3 |
 | Warmth slider | ≤1.1.1 | ✓ | ✓ | Becomes the filter in B&W mode |
@@ -38,7 +39,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Selfie flash (screen flash with a lit frame) | 1.10.0 | ✓ | — | |
 | Self-timer (2 / 5 / 10 s), experimental | 1.14.3 | ✓ | — | Behind Settings › Experimental |
 | Long exposure (5–60 s), experimental | 1.14.3 | ✓ | — | Gathers light in dark scenes 1.14.5 |
-| **Video** (PHOTO / VIDEO pill; HEVC; look baked in; AE LOCK; quality Low / Optimal / High) | 1.10.1 prototype; 1.14.7 not experimental | ✓ | ✓ | HEVC 1.10.3; stabilization 1.10.5 / 1.10.7; AE lock 1.10.7. iOS ported 2026-11-22 (1080p30 HEVC, AAC stereo where offered, saved to Photos › RawBoy Camera; the camera's own stabilization; not compiled or tried on a phone yet) |
+| **Video** (PHOTO / VIDEO pill; HEVC; look baked in; AE/WB LOCK; quality Low / Optimal / High) | 1.10.1 prototype; 1.14.7 not experimental | ✓ | ✓ | HEVC 1.10.3; stabilization 1.10.5 / 1.10.7; AE lock 1.10.7 (extended with WB lock and photo mode). iOS ported 2026-11-22 (1080p30 HEVC, AAC stereo where offered, saved to Photos › RawBoy Camera; the camera's own stabilization; not compiled or tried on a phone yet) |
 | Video: flat video for grading (Apple Log) | 1.10.8 | ✓ | — | Not planned for iOS |
 | Volume buttons take a photo | ≤1.1.1 | ✓ | ✓ volume + Camera Control click | Launching from Camera Control would need a LockedCameraCapture extension: not done |
 | Shutter sound (optional) | 1.3.0 | ✓ | ✓ 1.4.7 | iOS 18: `isShutterSoundSuppressionEnabled`; always on where the law requires |

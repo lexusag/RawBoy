@@ -44,8 +44,10 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var videoMode = false
     /** Elapsed recording time in whole seconds, nil when not recording. */
     @Published private(set) var recordingSeconds: Int?
-    /** Video mode's exposure lock (AE LOCK), separate from the focus lock. */
+    /** Exposure and white balance lock (AE/WB LOCK), available in photo and video modes, separate from focus lock. */
     @Published private(set) var exposureLocked = false
+    /** Live auto-develop exposure (EV) held while AE/WB lock is active so recomposing does not re-meter it. */
+    private var lockedExposureEv: Float?
     /** Where the focus ring is being dragged (upright normalised, as shown), or nil; it focuses there on release. */
     @Published private(set) var dragPoint: CGPoint?
     /** focusPoint follows the tapped subject (settings.trackFocus); the lock ends by itself once it is lost. */
@@ -133,6 +135,8 @@ final class CameraViewModel: ObservableObject {
         let frameNumber: Int
         /** True when metered on a tapped focus point, false for auto centre metering. */
         let spotMetered: Bool
+        /** Auto-develop exposure (EV) held while AE/WB lock is active; nil when unlocked. */
+        let lockedExposureEv: Float?
     }
     private var shots: [Shot] = []
     private var developing = false
@@ -223,6 +227,7 @@ final class CameraViewModel: ObservableObject {
         startTask?.cancel()
         startTask = nil
         controller.stop()
+        setExposureLock(false)
         focusPoint = nil
         stopTracking()
         endDrag()
@@ -449,6 +454,7 @@ final class CameraViewModel: ObservableObject {
 
     private func switchTo(_ lens: CameraController.Info) {
         info = lens
+        setExposureLock(false)  // a new lens or format must converge AE/AWB fresh
         focusPoint = nil  // the restart ends any focus lock
         stopTracking()
         endDrag()
@@ -499,19 +505,25 @@ final class CameraViewModel: ObservableObject {
                 self.analysing = false
                 // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at
                 // once; the viewfinder eases there over a few updates instead of snapping. Brightness's compensation isn't
-                // eased (see easedExposure).
+                // eased (see easedExposure). While AE/WB lock is active, hold the locked exposure without re-metering.
                 var eased = auto
-                // Video: the phone's AE takes a second or so to bring a Brightness change into the frames, so the
-                // compensation the develop takes back out follows it with a lag, else the picture swings up and down.
                 var shownCaptureEv = captureEv
-                if self.videoMode, let last = self.live {
-                    shownCaptureEv = last.captureEv + 0.3 * (captureEv - last.captureEv)
-                    eased.exposure = auto.exposure + captureEv - shownCaptureEv
+                if self.exposureLocked {
+                    let held = self.lockedExposureEv ?? auto.exposure
+                    if self.lockedExposureEv == nil { self.lockedExposureEv = held }
+                    eased.exposure = held
+                } else {
+                    // Video: the phone's AE takes a second or so to bring a Brightness change into the frames, so the
+                    // compensation the develop takes back out follows it with a lag, else the picture swings up and down.
+                    if self.videoMode, let last = self.live {
+                        shownCaptureEv = last.captureEv + 0.3 * (captureEv - last.captureEv)
+                        eased.exposure = auto.exposure + captureEv - shownCaptureEv
+                    }
+                    eased.exposure = Self.easedExposure(
+                        last: self.live?.auto.exposure, lastCaptureEv: self.live?.captureEv ?? 0,
+                        exposure: eased.exposure, captureEv: shownCaptureEv,
+                        step: self.videoMode ? Self.videoEvStep : Self.maxEvStep)
                 }
-                eased.exposure = Self.easedExposure(
-                    last: self.live?.auto.exposure, lastCaptureEv: self.live?.captureEv ?? 0,
-                    exposure: eased.exposure, captureEv: shownCaptureEv,
-                    step: self.videoMode ? Self.videoEvStep : Self.maxEvStep)
                 // Video: the auto tone (rounded to whole slider steps) and the as-shot white also glide, else each
                 // 300 ms analysis shows as a jump in gamma or colour.
                 var shownDefaults = defaults
@@ -520,8 +532,10 @@ final class CameraViewModel: ObservableObject {
                     eased.highlights = glide(last.auto.highlights, eased.highlights, 1)
                     eased.shadows = glide(last.auto.shadows, eased.shadows, 1)
                     eased.contrast = glide(last.auto.contrast, eased.contrast, 1)
-                    shownDefaults.temperature = last.defaults.temperature + 0.2 * (defaults.temperature - last.defaults.temperature)
-                    shownDefaults.tint = last.defaults.tint + 0.2 * (defaults.tint - last.defaults.tint)
+                    if !self.exposureLocked {
+                        shownDefaults.temperature = last.defaults.temperature + 0.2 * (defaults.temperature - last.defaults.temperature)
+                        shownDefaults.tint = last.defaults.tint + 0.2 * (defaults.tint - last.defaults.tint)
+                    }
                 }
                 self.live = Live(base: base, stats: stats, defaults: shownDefaults, auto: eased, captureEv: shownCaptureEv)
                 self.publish()
@@ -954,7 +968,6 @@ final class CameraViewModel: ObservableObject {
         guard on != videoMode, recorder == nil, status == .ready else { return }
         videoMode = on
         renderer.animateGrain = on
-        if !on { setExposureLock(false) }  // the lock is video mode's: photos meter as always
         let stabilization = settings.videoStabilization
         Task {
             // The microphone is asked for the first time video mode is switched on; refusing gives silent videos.
@@ -976,8 +989,8 @@ final class CameraViewModel: ObservableObject {
     }
 
     func setExposureLock(_ locked: Bool) {
-        if locked && !videoMode { return }
         exposureLocked = locked
+        lockedExposureEv = locked ? live?.auto.exposure : nil
         controller.setExposureLock(locked)
     }
 
@@ -1094,6 +1107,7 @@ final class CameraViewModel: ObservableObject {
         let frameNumber = CameraSettingsStore.nextFrameNumber()
         let name = "IMG_" + Self.timestamp()
         let gps = s.geotag ? location.current.map(LocationTracker.gpsMetadata) : nil
+        let lockedEv = (exposureLocked && flash == .off) ? lockedExposureEv : nil
         pending += 1
         Task {
             do {
@@ -1102,7 +1116,7 @@ final class CameraViewModel: ObservableObject {
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
-                                  iso: result.iso, exposureSeconds: result.exposureSeconds, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, viewfinderExposure: live?.auto.exposure ?? 0, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered))
+                                  iso: result.iso, exposureSeconds: result.exposureSeconds, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, viewfinderExposure: live?.auto.exposure ?? 0, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered, lockedExposureEv: lockedEv))
                 developNext()
             } catch {
                 Self.log.error("capture: \(error.localizedDescription)")
@@ -1189,7 +1203,14 @@ final class CameraViewModel: ObservableObject {
                         ? shot.exposureSeconds
                         : (exifExp.isFinite && exifExp > 0 ? Float(exifExp) : 0)
                     let sceneLight = SceneLight(exposureSeconds: exposureSeconds, postRawBoost: 1, captureEv: shot.compensationEv)
-                    let autoBase = SceneRecognition.apply(a.autoBase, stats: a.stats, light: sceneLight)
+                    let autoBase: DevelopParams
+                    if let lockedEv = shot.lockedExposureEv {
+                        var fixed = a.autoBase
+                        fixed.exposure = lockedEv
+                        autoBase = fixed
+                    } else {
+                        autoBase = SceneRecognition.apply(a.autoBase, stats: a.stats, light: sceneLight)
+                    }
                     var params = s.develop(autoBase, hasFace: a.stats.hasFace)
                     // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
                     params.denoise = max(params.denoise, Self.highIsoDenoise(a.stats.iso * noiseScale))

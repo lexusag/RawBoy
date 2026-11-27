@@ -308,6 +308,7 @@ final class CameraController: NSObject, @unchecked Sendable {
 
     func stop() {
         queue.async {
+            self.exposureLocked = false
             if self.session.isRunning { self.session.stopRunning() }
         }
     }
@@ -415,7 +416,7 @@ final class CameraController: NSObject, @unchecked Sendable {
         Self.log.notice("video stabilization: format supports \(modes) on \(Int(CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription).width))px, asked \(self.videoStabilizationOn), preferred \(want.rawValue), active \(c.activeVideoStabilizationMode.rawValue)")
     }
 
-    /** Video mode's exposure lock (AE LOCK): the exposure stays where it is until released. */
+    /** Exposure and white balance lock (AE/WB LOCK): exposure and white balance stay where they are until released. */
     func setExposureLock(_ locked: Bool) {
         queue.async {
             self.exposureLocked = locked
@@ -424,14 +425,18 @@ final class CameraController: NSObject, @unchecked Sendable {
     }
 
     private func applyExposureLock(_ device: AVCaptureDevice) {
-        let mode: AVCaptureDevice.ExposureMode = exposureLocked ? .locked : .continuousAutoExposure
-        guard device.exposureMode != mode, device.isExposureModeSupported(mode) else { return }
+        let expMode: AVCaptureDevice.ExposureMode = exposureLocked ? .locked : .continuousAutoExposure
+        let wbMode: AVCaptureDevice.WhiteBalanceMode = exposureLocked ? .locked : .continuousAutoWhiteBalance
+        let setExp = device.exposureMode != expMode && device.isExposureModeSupported(expMode)
+        let setWb = device.whiteBalanceMode != wbMode && device.isWhiteBalanceModeSupported(wbMode)
+        guard setExp || setWb else { return }
         do {
             try device.lockForConfiguration()
-            device.exposureMode = mode
+            if setExp { device.exposureMode = expMode }
+            if setWb { device.whiteBalanceMode = wbMode }
             device.unlockForConfiguration()
         } catch {
-            Self.log.error("exposure lock: \(error.localizedDescription)")
+            Self.log.error("exposure/WB lock: \(error.localizedDescription)")
         }
     }
 

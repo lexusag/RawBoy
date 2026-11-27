@@ -35,10 +35,10 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "СТЕЖЕННЯ  ✕",
     "AF LOCK  ✕" to
         "AF ФІКС.  ✕",
-    "AE LOCK  ✕" to
-        "AE ФІКС.  ✕",
-    "AE LOCK" to
-        "AE ФІКС.",
+    "AE/WB LOCK  ✕" to
+        "AE/WB ФІКС.  ✕",
+    "AE/WB LOCK" to
+        "AE/WB ФІКС.",
     "Without look" to
         "Без обробки",
     "Brightness" to
@@ -489,8 +489,12 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Верхня панель",
     "Photo / Video (under the picture)" to
         "Фото / Відео (під зображенням)",
-    "The PHOTO and VIDEO pill above the shutter, or swipe sideways on the shutter area (left for video). Switches to video: the shutter becomes a red record button and the picture is recorded with the look on it, 1080p at 30 fps with stereo sound, into Movies/RawBoy Camera. The darkened bands show what a 16:9 video leaves out of the viewfinder. Lens and camera can't change while recording; leaving the app stops it. AE LOCK (top right) holds the exposure and a tap on the picture locks focus, each on its own. Settings › Video quality picks Low, Optimal or High. Settings › Flat video for grading records the picture without the look, to grade later. Settings › Optical video stabilization uses the lens stabilizer only. The first recordings on a phone may start a moment later while the camera finds a way to record on it; on some phones the viewfinder then restarts once and asks to press record again." to
-        "Перемикач ФОТО і ВІДЕО над затвором або проведіть убік по області затвора (ліворуч — відео). Перемикає на відео: затвор стає червоною кнопкою запису, а картинка записується зі стилем, 1080p, 30 к/с, зі стереозвуком, у Movies/RawBoy Camera. Затемнені смуги показують, що відео 16:9 прибирає з видошукача. Під час запису не можна змінити об’єктив і камеру; вихід із застосунку зупиняє запис. AE ФІКС. (угорі праворуч) утримує експозицію, а дотик до картинки фіксує фокус, кожне окремо. Налаштування › Якість відео: низька, оптимальна або висока. Налаштування › Пласке відео для кольорокорекції записує без стилю, щоб обробити пізніше. Налаштування › Оптична стабілізація використовує лише стабілізатор об’єктива. Перші записи на телефоні можуть починатися із затримкою, поки камера шукає спосіб запису; на деяких телефонах видошукач один раз перезапускається і просить знову натиснути запис.",
+    "AE/WB LOCK (top left)" to
+        "AE/WB ФІКС. (угорі ліворуч)",
+    "Holds the current exposure and white balance in both photo and video modes, independently of focus lock. Tap AE/WB LOCK ✕ or switch lenses to release it." to
+        "Утримує поточну експозицію та баланс білого у фото- і відеорежимі, незалежно від фіксації фокусу. Торкніться AE/WB ФІКС. ✕ або змініть об’єктив, щоб зняти.",
+    "The PHOTO and VIDEO pill above the shutter, or swipe sideways on the shutter area (left for video). Switches to video: the shutter becomes a red record button and the picture is recorded with the look on it, 1080p at 30 fps with stereo sound, into Movies/RawBoy Camera. The darkened bands show what a 16:9 video leaves out of the viewfinder. Lens and camera can't change while recording; leaving the app stops it. AE/WB LOCK (top left) holds the exposure and white balance and a tap on the picture locks focus, each on its own. Settings › Video quality picks Low, Optimal or High. Settings › Flat video for grading records the picture without the look, to grade later. Settings › Optical video stabilization uses the lens stabilizer only. The first recordings on a phone may start a moment later while the camera finds a way to record on it; on some phones the viewfinder then restarts once and asks to press record again." to
+        "Перемикач ФОТО і ВІДЕО над затвором або проведіть убік по області затвора (ліворуч — відео). Перемикає на відео: затвор стає червоною кнопкою запису, а картинка записується зі стилем, 1080p, 30 к/с, зі стереозвуком, у Movies/RawBoy Camera. Затемнені смуги показують, що відео 16:9 прибирає з видошукача. Під час запису не можна змінити об’єктив і камеру; вихід із застосунку зупиняє запис. AE/WB ФІКС. (угорі ліворуч) утримує експозицію та баланс білого, а дотик до картинки фіксує фокус, кожне окремо. Налаштування › Якість відео: низька, оптимальна або висока. Налаштування › Пласке відео для кольорокорекції записує без стилю, щоб обробити пізніше. Налаштування › Оптична стабілізація використовує лише стабілізатор об’єктива. Перші записи на телефоні можуть починатися із затримкою, поки камера шукає спосіб запису; на деяких телефонах видошукач один раз перезапускається і просить знову натиснути запис.",
     "RAW" to
         "RAW",
     "Save raw DNG only by default (lit), with a processed JPEG preview embedded inside the DNG (3000 px at quality 85 by default; 12 MP or Pure RAW in Settings). Enable Settings › Also save JPEG to save a standalone JPEG alongside the DNG. Struck through: JPEG only." to

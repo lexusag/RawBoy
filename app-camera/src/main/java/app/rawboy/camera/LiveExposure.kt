@@ -23,4 +23,17 @@ object LiveExposure {
         val metered = exposure + captureEv
         return lastMetered + (metered - lastMetered).coerceIn(-step, step) - captureEv
     }
+
+    /**
+     * The exposure to show: while exposure is locked ([lockedExposureEv] non-null), holds it without re-metering or
+     * easing; otherwise eases via [ease].
+     */
+    fun resolve(
+        lockedExposureEv: Float?,
+        lastExposure: Float?,
+        lastCaptureEv: Float,
+        exposure: Float,
+        captureEv: Float,
+        step: Float,
+    ): Float = lockedExposureEv ?: ease(lastExposure, lastCaptureEv, exposure, captureEv, step)
 }

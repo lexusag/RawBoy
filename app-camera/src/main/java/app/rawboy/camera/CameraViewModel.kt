@@ -465,8 +465,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setVideoMode(on: Boolean) {
         if (_recordingMs.value != null || _longExposing.value || selfTimerJob != null) return
         _videoMode.value = on
+        if (current.flatVideo) setExposureLock(false) // flat video changes exposure compensation
         controller.setExposureBias(exposureBias(current)) // flat video raises it
-        if (!on) setExposureLock(false) // the lock is video mode's: photos meter as always
         applyStabilization()
         syncRawRing()
         republish() // the video viewfinder drops the colour denoise (see publish)
@@ -474,12 +474,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _exposureLocked = MutableStateFlow(false)
 
-    /** Video mode's exposure lock (AE lock), separate from the focus lock. */
+    /** Exposure and white balance lock (AE/WB lock), available in photo and video modes, separate from focus lock. */
     val exposureLocked: StateFlow<Boolean> = _exposureLocked
 
+    /** Live auto-develop exposure (EV) held while AE/WB lock is active so recomposing does not re-meter it. */
+    @Volatile
+    private var lockedExposureEv: Float? = null
+
     fun setExposureLock(locked: Boolean) {
-        if (locked && !_videoMode.value) return
+        if (locked && (isStreetActive || _settings.value.easy)) return
         _exposureLocked.value = locked
+        lockedExposureEv = if (locked) live?.auto?.exposure else null
         controller.setExposureLock(locked)
     }
 
@@ -935,8 +940,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun applyStreetTransition(prev: CameraSettings, next: CameraSettings, nowActive: Boolean) {
-        if (nowActive && _videoMode.value && _recordingMs.value == null) {
-            _videoMode.value = false
+        if (nowActive) {
+            if (_videoMode.value && _recordingMs.value == null) _videoMode.value = false
             setExposureLock(false)
         }
         if (prev.activeSelfTimer > 0 && next.activeSelfTimer == 0) cancelSelfTimer()
@@ -1012,7 +1017,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         clearQueuedShutter()
         startJob?.cancel()
         startJob = null
-        controller.stop() // also ends a focus lock
+        controller.stop() // also ends focus and AE/WB locks
+        setExposureLock(false)
         stopTracking(clearPoint = true)
         _dragPoint.value = null
         clearQr()
@@ -1360,6 +1366,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun switchTo(lens: CameraController.Info) {
         info = lens
         publishLensCapabilities(lens)
+        setExposureLock(false) // a new lens must converge AE/AWB fresh
         stopTracking(clearPoint = true) // the restart ends any focus lock
         _dragPoint.value = null
         // The live develop belongs to the old lens: start the new one fresh.
@@ -1443,8 +1450,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // the viewfinder eases there over a few updates instead of snapping. Brightness's compensation isn't eased
             // (see LiveExposure): it would overshoot by over a stop and sink back.
             // Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording.
+            // While AE/WB lock is active, hold the locked exposure without re-metering or easing.
+            val lockedEv = if (_exposureLocked.value) {
+                lockedExposureEv ?: auto.exposure.also { lockedExposureEv = it }
+            } else {
+                null
+            }
             val step = if (_videoMode.value) VIDEO_EV_STEP else MAX_EV_STEP
-            val eased = auto.copy(exposure = LiveExposure.ease(live?.auto?.exposure, live?.captureEv ?: 0f, auto.exposure, captureEv, step))
+            val eased = auto.copy(exposure = LiveExposure.resolve(lockedEv, live?.auto?.exposure, live?.captureEv ?: 0f, auto.exposure, captureEv, step))
             // A preview without the ISP's local lift (PreviewProfile.liftsShadows false) shows the backlight lift the
             // shot will get, eased like the exposure: a window panning into view would otherwise lift the shadows at
             // once. Not in video, whose recordings keep the plain develop.
@@ -1506,7 +1519,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         rawMetered += key
         meterJob = viewModelScope.launch {
             delay(RAW_METER_DELAY_MS)
-            if (info !== lens || activeCaptures > 0 || meterArea() != METER_CENTRE) {
+            if (info !== lens || activeCaptures > 0 || meterArea() != METER_CENTRE || _exposureLocked.value) {
                 rawMetered -= key
                 return@launch
             }
@@ -1753,7 +1766,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setEasy(on: Boolean) {
         if (_recordingMs.value != null || _longExposing.value) return
         val prev = current
-        if (on) _streetSession.value = false
+        if (on) {
+            _streetSession.value = false
+            setExposureLock(false)
+        }
         change { it.copy(easy = on, street = if (on) false else it.street) }
         val next = current
         if (prev.activeSelfTimer > 0 && next.activeSelfTimer == 0) cancelSelfTimer()
@@ -2095,10 +2111,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     delay(SCREEN_FLASH_SETTLE_MS)
                 }
                 val pureRawThumb = if (settings.pureRaw) live?.let { viewfinderThumbnail(it.base.base, it.auto.exposure) } else null
+                val lockedEv = if (_exposureLocked.value && flash == FlashMode.OFF && !screenFlash && longExposure == null) lockedExposureEv else null
                 val shot = capture(
                     shotId, settings, hiRes, viewfinderKey, flash, burstFrames, preferRing, screenFlash,
                     mergeNote, longExposure, streetMode = street, streetShutter = streetShutter, shutterStartMs = shutterStartMs,
-                ).copy(mayHaveFace = mayHaveFace, pureRawThumbnail = pureRawThumb)
+                ).copy(mayHaveFace = mayHaveFace, pureRawThumbnail = pureRawThumb, lockedExposureEv = lockedEv)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
