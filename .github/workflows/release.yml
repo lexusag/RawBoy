@@ -80,7 +80,7 @@ jobs:
       FORCE: ${{ inputs.force_apks }}
       GH_TOKEN: ${{ github.token }}
       NOT_APP_PATHS: >-
-        :!web :!ios :!docs :!tools :!branding :!*.md :!.dockerignore :!.gitignore
+        :!web :!ios :!docs :!changelog :!tools :!branding :!*.md :!.dockerignore :!.gitignore
         :!.claude :!.impeccable :!.github/workflows/ci.yml :!.github/workflows/cloudflare-cleanup.yml
         :!.github/workflows/play.yml :!.github/workflows/testflight.yml :!app-pro :!app-auto :!app-camera
     steps:

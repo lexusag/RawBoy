@@ -36,7 +36,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - [Installing on your iPhone](docs/ios-install.md): build the iOS apps and sideload them with your Apple ID
 - [Known limitations / next steps](docs/limitations.md)
 - [Third-party components](docs/third-party.md)
-- [Changelog](CHANGELOG.md)
+- [Changelog](CHANGELOG.md) (newest entries in [changelog/](changelog/))
 
 ## Repository structure
 
@@ -50,15 +50,16 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | `ios/` | The iOS apps, generated with XcodeGen from `project.yml`: `Pro/`, `Auto/` and `Camera/` app targets, `Engine/` (the Swift/Metal port of the engine), `EngineTests/`, `native/` (the C++ engine built as frameworks), `shaders/` (generates the Metal shaders from the root `shaders/`) and `mediapipe/` (model fetch). |
 | `web/` | **RawBoy Web** (Vite + React + TypeScript): `src/engine/` is the TypeScript port of the Kotlin engine, `src/ui/` the RawBoy, Auto and Browser tabs, `src/worker/` the Web Workers, `src/drive/` Google Drive, and `native/` the C++ engine compiled to WebAssembly. Also its Dockerfile and nginx config (see [web/README.md](web/README.md)). |
 | `luts/` | Bundled `.cube` film-look LUTs, plus `spektrafilm/` (spektrafilm's film stock LUTs, CC BY-SA 4.0). |
+| `changelog/` | Per-change changelog fragments (`YYYY-MM-DD-<slug>.md`) added by pull requests to avoid merge conflicts; periodically folded into [CHANGELOG.md](CHANGELOG.md) with `node tools/changelog/rollup.mjs`. |
 | `docs/` | User and developer documentation (see [Documentation](#documentation)). |
-| `tools/` | Developer tools: `auto-eval` (measuring Auto's defaults against a tagged dataset), `burst_merge` and `dng_jxl` (host tests for burst merging and lossy JPEG XL DNGs), `display_roundtrip` (display-source round-trip checks), `film_luts` (LUT generation), `icons` (app icons from `branding/`) and `web_ui_stub` (runs the web UI without the WASM build). |
+| `tools/` | Developer tools: `auto-eval` (measuring Auto's defaults against a tagged dataset), `burst_merge` and `dng_jxl` (host tests for burst merging and lossy JPEG XL DNGs), `changelog` (validates and rolls up `changelog/*.md` into `CHANGELOG.md`), `display_roundtrip` (display-source round-trip checks), `film_luts` (LUT generation), `icons` (app icons from `branding/`) and `web_ui_stub` (runs the web UI without the WASM build). |
 | `branding/` | App logos (SVG) for RawBoy, Auto, Camera and Film. |
 | `third_party/` | Where the Adobe DNG SDK goes for builds (see [third_party/README.md](third_party/README.md)). |
 | `licenses/` | Third-party notices shipped with the apps. |
 | `gradle/`, `*.gradle.kts`, `gradlew` | The Gradle build for the Android modules. |
 | `.github/workflows/` | CI: `ci.yml` (pull request checks: web build and tests, Android compile; the single required job is `pr-check`), `release.yml` (release APKs of all three apps, and the web deploy) and `play.yml` (run by hand: signed bundles uploaded to Google Play). |
 
-Root files: [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md),
+Root files: [CHANGELOG.md](CHANGELOG.md) (archived entries; new entries live in [changelog/](changelog/)), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md),
 [UI.md](UI.md) (UI backlog) and [CLAUDE.md](CLAUDE.md) (notes on how the code fits together).
 
 ## Support

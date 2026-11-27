@@ -56,7 +56,7 @@ Do Stage 1 as "record what the viewfinder shows": render the existing develop pa
 - Photo | Video segmented switch (and swipe on the viewfinder) near the lens row; in landscape it fits the left-edge column.
 - Shutter becomes a red record button (circle -> rounded square while recording); a timer pill (mm:ss, red dot) at top centre; optional second small button for a still during recording (Android: skip in v1).
 - Volume key starts/stops. Look menu, Film/B&W, Strength, Brightness (maps to AE compensation, already wired), Warmth all stay live while recording.
-- Update `ui/Help.kt`, iOS `ui/Help.swift`, `docs/camera.md`, `CHANGELOG.md` (the repo's convention).
+- Update `ui/Help.kt`, iOS `ui/Help.swift`, `docs/camera.md`, and add an entry under `changelog/` (the repo's convention).
 
 ### Stage 1 effort (one person, includes tests/polish)
 

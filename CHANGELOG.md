@@ -1,3 +1,10 @@
+# Changelog
+
+> New entries are added as standalone files in [`changelog/`](changelog/) (`YYYY-MM-DD-<slug>.md`) so parallel pull requests do not cause merge conflicts.
+> Run `node tools/changelog/rollup.mjs` to fold pending entries from `changelog/` into this archive.
+
+<!-- changelog-entries -->
+
 **Camera: Portrait toggle also disables depth map saving (Android, 2026-11-26)**
 
 - Turning the top-bar **Portrait** button off now switches off both **Save depth map in DNG** and **Generate portrait in camera** (`CameraSettings.togglePortrait`), instead of leaving depth map capture enabled on subsequent normal shots. Changing depth settings or toggling Portrait also syncs the camera's hardware/dual-pixel depth stream (`CameraViewModel.syncDepthStream`) when the active lens's stream changes (no restart when using AI depth).
