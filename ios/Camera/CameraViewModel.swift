@@ -146,8 +146,13 @@ final class CameraViewModel: ObservableObject {
     private static let frontNoiseIsoScale: Float = 8
     /** Exposure is metered on the middle half of the frame's width and height (owner's choice), unless tapped. */
     private static let meterCentre = MeterArea.centre(0.5)
-    /** How the phone is held (degrees clockwise from portrait), kept while it lies flat; for the tap's metering spot. */
-    private var deviceDegrees = 0
+    /**
+     * How the phone is held (0, 90, 180 or 270 degrees clockwise from upright portrait), driven continuously by
+     * CoreMotion gravity (with hysteresis and flat-pose memory) and seeded from system orientation as fallback.
+     * Shared by still capture, video recording and tap metering.
+     */
+    private var orientationTracker = DeviceOrientationTracker()
+    private var orientationObserver: NSObjectProtocol?
     /**
      * The iPhone's video frames are more saturated than the raw: fitted on 30 ProRAW shots (viewfinder 512 px copy at
      * the shutter vs the raw's, all lenses; Documents/debug + DeviceDngTests), log-chroma slope 0.58 (chroma error
@@ -160,7 +165,7 @@ final class CameraViewModel: ObservableObject {
 
     init() {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        if settings.showLevel { startTilt() }
+        seedOrientationFromSystem()
         controller.onFrame = { [renderer, subject] buffer, time in
             renderer.enqueue(buffer, time: time)
             let frame = renderer.frame
@@ -184,6 +189,7 @@ final class CameraViewModel: ObservableObject {
     /** Asks for camera access (once) and starts the camera. */
     func activate() {
         active = true
+        startOrientationTracking()
         // Location access taken away in the Settings app: geotagging can't work, so it shows as off.
         if settings.geotag && !location.authorized && !location.undetermined {
             change { $0.geotag = false }
@@ -207,6 +213,7 @@ final class CameraViewModel: ObservableObject {
         // A recording never carries on in the background: the file is finished and kept.
         stopRecording()
         active = false
+        stopOrientationTracking()
         updateLocation()
         if saveTask != nil {
             saveTask?.cancel()
@@ -379,16 +386,38 @@ final class CameraViewModel: ObservableObject {
         return .spot(x: Float(p.x), y: Float(p.y))
     }
 
-    /** The device's turn from portrait now (clockwise, as the photo's horizon-level orientation follows it). */
+    /** The device's turn from portrait now (clockwise, 0/90/180/270), used by photo capture, video and tap metering. */
     private func currentDeviceDegrees() -> Int {
-        switch UIDevice.current.orientation {
-        case .portrait: deviceDegrees = 0
-        case .landscapeRight: deviceDegrees = 90  // home side on the left: turned clockwise
-        case .portraitUpsideDown: deviceDegrees = 180
-        case .landscapeLeft: deviceDegrees = 270
-        default: break  // flat or unknown: as last held
+        if let g = motion.deviceMotion?.gravity {
+            orientationTracker.update(ax: g.x, ay: g.y, az: g.z)
+        } else if let a = motion.accelerometerData?.acceleration {
+            orientationTracker.update(ax: a.x, ay: a.y, az: a.z)
         }
-        return deviceDegrees
+        if !orientationTracker.hasGravityReading {
+            seedOrientationFromSystem()
+        }
+        return orientationTracker.degrees
+    }
+
+    /** Maps UIDevice orientation (or active window scene interface orientation) to clockwise degrees from portrait. */
+    private func systemDeviceDegrees() -> Int? {
+        switch UIDevice.current.orientation {
+        case .portrait: return 0
+        case .landscapeRight: return 90  // home side on the left: phone turned 90° clockwise
+        case .portraitUpsideDown: return 180
+        case .landscapeLeft: return 270
+        default: break
+        }
+        guard let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else {
+            return nil
+        }
+        switch scene.effectiveGeometry.interfaceOrientation {
+        case .portrait: return 0
+        case .landscapeLeft: return 90  // UIInterfaceOrientation.landscapeLeft == UIDeviceOrientation.landscapeRight
+        case .portraitUpsideDown: return 180
+        case .landscapeRight: return 270
+        default: return nil
+        }
     }
 
     /** Switches to the lens labelled [label] (UW, W, T) on the current side. */
@@ -592,41 +621,116 @@ final class CameraViewModel: ObservableObject {
     func setShowGrid(_ on: Bool) { change { $0.showGrid = on } }
     func setShowLevel(_ on: Bool) {
         change { $0.showLevel = on }
-        if on { startTilt() } else { stopTilt() }
+        if !on { clearTilt() }
+        if active { updateMotionInterval() }
     }
 
-    private func startTilt() {
-        guard motion.isAccelerometerAvailable, !motion.isAccelerometerActive else { return }
-        motion.accelerometerUpdateInterval = 1.0 / 20
-        motion.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
-            guard let self, let a = data?.acceleration else { return }
-            // Gravity along the screen's axes: flat on a table (z dominates) there is no horizon to show.
-            if abs(a.z) > 0.9 {
-                if self.tilt != nil { self.tilt = nil }
-                self.tiltSmooth = nil
-                return
+    private func startOrientationTracking() {
+        seedOrientationFromSystem()
+        if orientationObserver == nil {
+            orientationObserver = NotificationCenter.default.addObserver(
+                forName: UIDevice.orientationDidChangeNotification, object: nil, queue: .main
+            ) { [weak self] _ in
+                MainActor.assumeIsolated { self?.onSystemOrientationChanged() }
             }
-            // Portrait upright: gravity is -y. Turned clockwise, it moves to +x.
-            let r = atan2(a.x, -a.y)
-            // Low-pass the angle as a unit vector (no jump across 360), alpha 0.2 at 20 Hz (about a 0.2 s time constant).
-            let v = self.tiltSmooth.map { (x: $0.x + 0.2 * (sin(r) - $0.x), y: $0.y + 0.2 * (cos(r) - $0.y)) } ?? (x: sin(r), y: cos(r))
-            self.tiltSmooth = v
-            let degrees = atan2(v.x, v.y) * 180 / .pi
-            let nearest = (degrees / 90).rounded() * 90
-            // Deadband: a hair either side of straight reads as straight. Tenths of a degree: no redraw for noise.
-            let snapped = abs(degrees - nearest) < 0.4 ? nearest : degrees
-            var delta = (snapped - self.tiltLast).truncatingRemainder(dividingBy: 360)
-            if delta > 180 { delta -= 360 } else if delta <= -180 { delta += 360 }
-            let next = ((self.tiltLast + delta) * 10).rounded() / 10
-            self.tiltLast = next
-            if self.tilt != next { self.tilt = next }
+        }
+        startMotion()
+    }
+
+    private func stopOrientationTracking() {
+        if let observer = orientationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            orientationObserver = nil
+        }
+        stopMotion()
+    }
+
+    private func seedOrientationFromSystem() {
+        if let deg = systemDeviceDegrees() {
+            orientationTracker.seed(degrees: deg)
         }
     }
 
-    private func stopTilt() {
-        motion.stopAccelerometerUpdates()
+    private func onSystemOrientationChanged() {
+        if let deg = systemDeviceDegrees() {
+            orientationTracker.updateFromSystem(degrees: deg)
+        }
+    }
+
+    private var motionInterval: TimeInterval { settings.showLevel ? 1.0 / 20 : 1.0 / 15 }
+
+    private func updateMotionInterval() {
+        if motion.isDeviceMotionActive {
+            motion.deviceMotionUpdateInterval = motionInterval
+        } else if motion.isAccelerometerActive {
+            motion.accelerometerUpdateInterval = motionInterval
+        } else if active {
+            startMotion()
+        }
+    }
+
+    /**
+     * Runs one CoreMotion gravity stream while active: prefers `CMDeviceMotion.gravity` (sensor-fused, immune to hand
+     * acceleration when lifting the phone) and falls back to raw accelerometer. Feeds both `orientationTracker`
+     * (photo/video orientation) and the horizon level line when `settings.showLevel` is on.
+     */
+    private func startMotion() {
+        if motion.isDeviceMotionAvailable {
+            guard !motion.isDeviceMotionActive else {
+                motion.deviceMotionUpdateInterval = motionInterval
+                return
+            }
+            motion.deviceMotionUpdateInterval = motionInterval
+            motion.startDeviceMotionUpdates(to: .main) { [weak self] data, _ in
+                guard let g = data?.gravity else { return }
+                MainActor.assumeIsolated { self?.handleGravity(x: g.x, y: g.y, z: g.z) }
+            }
+        } else if motion.isAccelerometerAvailable {
+            guard !motion.isAccelerometerActive else {
+                motion.accelerometerUpdateInterval = motionInterval
+                return
+            }
+            motion.accelerometerUpdateInterval = motionInterval
+            motion.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
+                guard let a = data?.acceleration else { return }
+                MainActor.assumeIsolated { self?.handleGravity(x: a.x, y: a.y, z: a.z) }
+            }
+        }
+    }
+
+    private func stopMotion() {
+        if motion.isDeviceMotionActive { motion.stopDeviceMotionUpdates() }
+        if motion.isAccelerometerActive { motion.stopAccelerometerUpdates() }
+        clearTilt()
+    }
+
+    private func clearTilt() {
         tiltSmooth = nil
-        tilt = nil
+        if tilt != nil { tilt = nil }
+    }
+
+    private func handleGravity(x: Double, y: Double, z: Double) {
+        orientationTracker.update(ax: x, ay: y, az: z)
+        guard settings.showLevel else { return }
+        // Gravity along the screen's axes: flat on a table (z dominates) there is no horizon to show.
+        if abs(z) > 0.9 {
+            clearTilt()
+            return
+        }
+        // Portrait upright: gravity is -y. Turned clockwise, it moves to +x.
+        let r = atan2(x, -y)
+        // Low-pass the angle as a unit vector (no jump across 360), alpha 0.2 at 20 Hz (about a 0.2 s time constant).
+        let v = tiltSmooth.map { (x: $0.x + 0.2 * (sin(r) - $0.x), y: $0.y + 0.2 * (cos(r) - $0.y)) } ?? (x: sin(r), y: cos(r))
+        tiltSmooth = v
+        let degrees = atan2(v.x, v.y) * 180 / .pi
+        let nearest = (degrees / 90).rounded() * 90
+        // Deadband: a hair either side of straight reads as straight. Tenths of a degree: no redraw for noise.
+        let snapped = abs(degrees - nearest) < 0.4 ? nearest : degrees
+        var delta = (snapped - tiltLast).truncatingRemainder(dividingBy: 360)
+        if delta > 180 { delta -= 360 } else if delta <= -180 { delta += 360 }
+        let next = ((tiltLast + delta) * 10).rounded() / 10
+        tiltLast = next
+        if tilt != next { tilt = next }
     }
 
     func setShowHistogram(_ on: Bool) {
@@ -733,7 +837,8 @@ final class CameraViewModel: ObservableObject {
             }
         }
         if prev.showLevel && !next.showLevel {
-            stopTilt()
+            clearTilt()
+            if active { updateMotionInterval() }
         }
         if prev.showHistogram && !next.showHistogram {
             histogram = nil
@@ -983,7 +1088,8 @@ final class CameraViewModel: ObservableObject {
         let viewfinderKey = flash == .off ? live?.stats.key : nil
         let mayHaveFace = !controller.frames.faces.isEmpty
         // The photo is level with the horizon; the tap was on the (portrait) viewfinder.
-        let meter = meterArea.turned(currentDeviceDegrees())
+        let degrees = currentDeviceDegrees()
+        let meter = meterArea.turned(degrees)
         let spotMetered = focusPoint != nil && !(tracking && subjectHidden)
         let frameNumber = CameraSettingsStore.nextFrameNumber()
         let name = "IMG_" + Self.timestamp()
@@ -991,7 +1097,8 @@ final class CameraViewModel: ObservableObject {
         pending += 1
         Task {
             do {
-                let result = try await controller.captureDng(flash: flash, shutterSound: s.shutterSound, gps: gps) { [weak self] in
+                let result = try await controller.captureDng(flash: flash, shutterSound: s.shutterSound,
+                                                             deviceDegrees: degrees, gps: gps) { [weak self] in
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,

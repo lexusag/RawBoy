@@ -81,6 +81,19 @@ fragment float4 copyFragment(PassOut in [[stage_in]], texture2d<float> source [[
     return float4(source.sample(s, in.uv).rgb, 1.0);
 }
 
+/** Rotates an upright developed frame clockwise by [turns] quarter turns (video recorded sideways or upside down). */
+fragment float4 turnFragment(PassOut in [[stage_in]], texture2d<float> source [[texture(0)]],
+                             sampler s [[sampler(0)]], constant int& turns [[buffer(0)]]) {
+    float u = in.uv.x;
+    float v = in.uv.y;
+    float2 b;
+    if (turns == 1) b = float2(v, 1.0 - u);
+    else if (turns == 2) b = float2(1.0 - u, 1.0 - v);
+    else if (turns == 3) b = float2(1.0 - v, u);
+    else b = float2(u, v);
+    return source.sample(s, b);
+}
+
 /** Same-size copy with the shader's bloomBoost (and the native downsample's). */
 fragment float4 boostFragment(PassOut in [[stage_in]], texture2d<float> source [[texture(0)]], sampler s [[sampler(0)]]) {
     float3 c = max(source.sample(s, in.uv).rgb, 0.0);

@@ -1052,7 +1052,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   from the centre box only; other stats stay whole-frame (null = Auto's centre-weighted whole frame). Camera2 AE gets
   the same box as `CONTROL_AE_REGIONS`. While focus is locked by a tap both meter `MeterArea.Spot` (16% of the short
   side, shifted inside the frame): the live develop at the viewfinder point, the shot at that point turned by the
-  device rotation (`Spot.turned`; iOS reads `UIDevice.orientation`), since the photo is level and the viewfinder is
+  device rotation (`Spot.turned`; iOS uses `DeviceOrientationTracker` / CoreMotion gravity, shared with still capture and video), since the photo is level and the viewfinder is
   portrait. The front camera's preview crop isn't applied to the shot's spot (a few % off). Ports: `MeterArea.kt/.swift/.ts`.
 - Denoise coarse stage: `uDenoiseWide` = (denoise − 65) / 35 (`ShaderParams.wideDenoise`); luma 5×5 at stride 3,
   chroma 7×7 at stride 6 (18 px), range weights against the fine result. The sparse stages' taps are **jittered** per

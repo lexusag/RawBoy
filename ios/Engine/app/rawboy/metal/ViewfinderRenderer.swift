@@ -83,6 +83,7 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     private let boostPipeline: MTLRenderPipelineState
     private let boxDownPipeline: MTLRenderPipelineState
     private let tailScatterPipeline: MTLRenderPipelineState
+    private let turnPipeline: MTLRenderPipelineState
     private let mipSampler: MTLSamplerState
 
     private var pendingBuffer: CVPixelBuffer?
@@ -99,6 +100,7 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     private var halo: MTLTexture?
     private var tailRaw: MTLTexture?
     private var tail: MTLTexture?
+    private var videoTurned: MTLTexture?
     private var lastBase = Date.distantPast
     private var readbackInFlight = false
     private var stats = FrameStats()
@@ -155,6 +157,7 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
         boostPipeline = pipeline("boostFragment", .rgba16Float)
         boxDownPipeline = pipeline("boxDownFragment", .rgba16Float)
         tailScatterPipeline = pipeline("tailScatterFragment", .rgba16Float)
+        turnPipeline = pipeline("turnFragment", MetalContext.previewPixelFormat)
         let s = MTLSamplerDescriptor()
         s.minFilter = .linear
         s.magFilter = .linear
@@ -255,7 +258,8 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
 
     /**
      * The develop again, into a buffer of [sink]: the picture fills it (cover fit, centred crop), upright and mirrored as
-     * on the screen. Handed over when the GPU has finished it. Skipped when the sink has no free buffer.
+     * on the screen, then rotated clockwise by [VideoSink.turns] quarter turns when recording sideways or upside down.
+     * Handed over when the GPU has finished it. Skipped when the sink has no free buffer.
      */
     private func encodeVideo(_ commands: MTLCommandBuffer, _ sink: VideoSink, _ p: ShaderParams, _ f: Frame,
                              time: CMTime, grain: Float) {
@@ -265,11 +269,16 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
                                                   sink.width, sink.height, 0, &cv)
         guard let keep = cv, let target = CVMetalTextureGetTexture(keep) else { return }
         textures.bind(p)
+        let turns = ((sink.turns % 4) + 4) % 4
+        let odd = turns % 2 == 1
+        // Upright (portrait) draw dimensions before any quarter-turn rotation into the sink's coded size.
+        let pw = odd ? sink.height : sink.width
+        let ph = odd ? sink.width : sink.height
         let outW = p.lens.outputWidth
         let outH = p.lens.outputHeight
         // Cover fit: the part of the developed image the file shows, as fractions of it.
         let imageAspect = Float(outW) / Float(max(1, outH))
-        let fileAspect = Float(sink.width) / Float(sink.height)
+        let fileAspect = Float(pw) / Float(max(1, ph))
         let uw = min(1, fileAspect / imageAspect)
         let uh = min(1, imageAspect / fileAspect)
         let uv = [(1 - uw) / 2, (1 - uh) / 2, uw, uh]
@@ -278,8 +287,9 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
             input: PixelRect(x: 0, y: 0, width: f.fullWidth, height: f.fullHeight),
             output: PixelRect(x: 0, y: 0, width: outW, height: outH),
             imageWidth: f.fullWidth, imageHeight: f.fullHeight)
+        let developTarget = turns == 0 ? target : videoTarget(pw, ph)
         let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = target
+        pass.colorAttachments[0].texture = developTarget
         pass.colorAttachments[0].loadAction = .dontCare
         pass.colorAttachments[0].storeAction = .store
         guard let e = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
@@ -292,6 +302,12 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
             u.float("uGrainFrame", grain)
         }
         e.endEncoding()
+        if turns != 0 {
+            var k = Int32(turns)
+            draw(commands, turnPipeline, into: target, from: developTarget) { encoder in
+                encoder.setFragmentBytes(&k, length: MemoryLayout<Int32>.stride, index: 0)
+            }
+        }
         commands.addCompletedHandler { _ in
             // Keeps the texture cache's reference alive until the GPU is done with the buffer.
             withExtendedLifetime(keep) { sink.deliver(buffer, time) }
@@ -398,6 +414,17 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
         d.storageMode = .shared
         let t = ctx.device.makeTexture(descriptor: d)!
         slot = t
+        return t
+    }
+
+    /** A BGRA target for the upright video frame before [turnPipeline] turns it into the sink's buffer. */
+    private func videoTarget(_ w: Int, _ h: Int) -> MTLTexture {
+        if let t = videoTurned, t.width == w, t.height == h { return t }
+        let d = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: MetalContext.previewPixelFormat, width: w, height: h, mipmapped: false)
+        d.usage = [.renderTarget, .shaderRead]
+        d.storageMode = .private
+        let t = ctx.device.makeTexture(descriptor: d)!
+        videoTurned = t
         return t
     }
 
