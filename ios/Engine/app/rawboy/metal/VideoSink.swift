@@ -11,6 +11,8 @@ import Foundation
 public final class VideoSink: @unchecked Sendable {
     public let width: Int
     public let height: Int
+    /** Clockwise quarter turns applied to the upright portrait develop frame into this sink's buffers (0..3). */
+    public let turns: Int
     /** A developed frame, from a Metal completion thread: append it and let go quickly (the pool is small). */
     public var onFrame: ((CVPixelBuffer, CMTime) -> Void)?
     private var pool: CVPixelBufferPool?
@@ -23,9 +25,10 @@ public final class VideoSink: @unchecked Sendable {
     /** Frames the renderer skipped because every buffer was still in use (the encoder or the GPU was behind). */
     public var framesDropped: Int { lock.withLock { droppedValue } }
 
-    public init(width: Int, height: Int) {
+    public init(width: Int, height: Int, turns: Int = 0) {
         self.width = width
         self.height = height
+        self.turns = ((turns % 4) + 4) % 4
         let attributes: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
             kCVPixelBufferWidthKey as String: width,

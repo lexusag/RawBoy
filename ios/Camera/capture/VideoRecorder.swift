@@ -13,7 +13,7 @@ import RawBoyEngine
  * so the writer's session starts at the first video frame and audio before it is dropped.
  */
 final class VideoRecorder: @unchecked Sendable {
-    /** 1080p, portrait: the frames are always drawn upright, a phone held sideways is the file's transform. */
+    /** 1080p: portrait 1080 × 1920 or landscape 1920 × 1080, rotated upright on the GPU before encoding. */
     static let size = (long: 1920, short: 1080)
     private static let log = Logger(subsystem: "app.rawboy", category: "RawBoyVideo")
 
@@ -46,10 +46,10 @@ final class VideoRecorder: @unchecked Sendable {
     var failure: String? { lock.withLock { failureValue } }
 
     /**
-     * [degrees] is the phone's rotation (clockwise from portrait) when recording starts: the frames are always drawn
-     * upright as portrait 1080 x 1920, and the file's transform turns them back for a phone held sideways, as the
-     * system camera's own videos are. [bitrate] in bit/s (VideoQuality). [audioSettings]: the microphone output's recommended writer settings, or nil
-     * for a silent video.
+     * [degrees] is the phone's rotation (clockwise from portrait) when recording starts: frames are rotated upright on
+     * the GPU into portrait 1080 x 1920 or landscape 1920 x 1080 so the file carries upright pixels with an identity
+     * transform. [bitrate] in bit/s (VideoQuality). [audioSettings]: the microphone output's recommended writer
+     * settings, or nil for a silent video.
      */
     init(name: String, bitrate: Int, degrees: Int, audioSettings: [String: Any]?) throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("RawBoyVideo", isDirectory: true)
@@ -57,9 +57,9 @@ final class VideoRecorder: @unchecked Sendable {
         url = folder.appendingPathComponent(name + ".mp4")
         try? FileManager.default.removeItem(at: url)
         self.name = name
-        let width = Self.size.short
-        let height = Self.size.long
-        sink = VideoSink(width: width, height: height)
+        let turns = CameraOrientation.videoTurns(deviceDegrees: degrees)
+        let (width, height) = CameraOrientation.videoSize(turns: turns, long: Self.size.long, short: Self.size.short)
+        sink = VideoSink(width: width, height: height, turns: turns)
         writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
 
         func settings(_ codec: AVVideoCodecType) -> [String: Any] {
@@ -86,7 +86,7 @@ final class VideoRecorder: @unchecked Sendable {
         let chosen = writer.canApply(outputSettings: hevc, forMediaType: .video) ? hevc : settings(.h264)
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: chosen)
         videoInput.expectsMediaDataInRealTime = true
-        videoInput.transform = Self.transform(degrees: degrees, width: width, height: height)
+        videoInput.transform = .identity
         adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: videoInput,
             sourcePixelBufferAttributes: [
@@ -113,23 +113,7 @@ final class VideoRecorder: @unchecked Sendable {
             throw Failure(message: writer.error?.localizedDescription ?? "the file can't be written")
         }
         sink.onFrame = { [weak self] buffer, time in self?.appendVideo(buffer, time) }
-        Self.log.notice("recording \(name): \(self.writer.status.rawValue), audio \(self.audioInput != nil), \(bitrate / 1_000_000) Mbit/s")
-    }
-
-    /**
-     * The file's rotation for a phone held at [degrees] clockwise from portrait: the frames are portrait, so a phone
-     * turned clockwise needs them turned back anticlockwise to look upright. Written with the translation that keeps
-     * the turned frame at the origin, as a camera's own files carry it.
-     */
-    static func transform(degrees: Int, width: Int, height: Int) -> CGAffineTransform {
-        let w = CGFloat(width)
-        let h = CGFloat(height)
-        switch ((degrees % 360) + 360) % 360 {
-        case 90: return CGAffineTransform(a: 0, b: -1, c: 1, d: 0, tx: 0, ty: w)
-        case 180: return CGAffineTransform(a: -1, b: 0, c: 0, d: -1, tx: w, ty: h)
-        case 270: return CGAffineTransform(a: 0, b: 1, c: -1, d: 0, tx: h, ty: 0)
-        default: return .identity
-        }
+        Self.log.notice("recording \(name): \(width)x\(height) turns \(turns), status \(self.writer.status.rawValue), audio \(self.audioInput != nil), \(bitrate / 1_000_000) Mbit/s")
     }
 
     private func appendVideo(_ buffer: CVPixelBuffer, _ time: CMTime) {
