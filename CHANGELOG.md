@@ -1,3 +1,8 @@
+**Camera: plain frame icon for the Frames toggle (iOS, 2026-11-26)**
+
+- Replaced the top-bar **Frames** toggle icon from SF Symbol `photo.artframe` (a frame with a landscape picture inside) to `rectangle.inset.filled` (a plain frame with a solid inset rectangle, matching Android's `FrameIcon`).
+- Code: `ios/Camera/ui/CameraScreen.swift`, `app-camera/src/main/java/app/rawboy/camera/ui/CameraScreen.kt` (comment).
+
 **Camera: scene recognition map — brighter sunny days with blue sky (Android and iOS, 2026-11-26)**
 
 - **Extensible Camera scene recognition map (`SceneRecognition`):** maps recognised `CameraScene` values to exposure/tone adjustments (`ADJUSTMENTS` / `adjustments`) applied on top of `AutoTone.develop` in both the live viewfinder (before `LiveExposure` easing) and saved phone-AE shots on Android and iOS, without affecting RawBoy Auto or Pro.

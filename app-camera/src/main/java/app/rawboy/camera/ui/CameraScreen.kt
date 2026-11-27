@@ -2438,7 +2438,7 @@ private val FilmIcon: ImageVector by lazy {
     )
 }
 
-/** Framed picture icon for the top-bar Frames toggle (iOS: SF Symbol "photo.artframe"). */
+/** Frame icon for the top-bar Frames toggle (iOS: SF Symbol "rectangle.inset.filled"). */
 private val FrameIcon: ImageVector by lazy {
     icon(
         "Frame",
