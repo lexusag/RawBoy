@@ -22,6 +22,8 @@ import androidx.lifecycle.viewModelScope
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneAnalyzer
+import app.rawboy.auto.analysis.SceneLight
+import app.rawboy.auto.analysis.SceneRecognition
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.depth.DualPixelCalibrations
@@ -1425,8 +1427,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // The compensation of the frame this copy is, not of the newest result: during a Brightness step AE moves by a
             // stop within the frame or two between them.
             val shot = controller.frameAt(frameNs)
-            val captureEv = controller.appliedCompensationEv(shot ?: state, ofFrame = true)
-            val auto = AutoTone.develop(stats, defaults, phoneAe = true, captureEv = captureEv, splitLuma = false)
+            val frame = shot ?: state
+            val captureEv = controller.appliedCompensationEv(frame, ofFrame = true)
+            val sceneLight = SceneLight(
+                exposureSeconds = (frame?.exposureNs ?: 0L) / 1e9f,
+                postRawBoost = frame?.postRawBoost ?: 1f,
+                captureEv = captureEv,
+            )
+            val auto = SceneRecognition.apply(
+                AutoTone.develop(stats, defaults, phoneAe = true, captureEv = captureEv, splitLuma = false),
+                stats,
+                sceneLight,
+            )
             // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at once;
             // the viewfinder eases there over a few updates instead of snapping. Brightness's compensation isn't eased
             // (see LiveExposure): it would overshoot by over a stop and sink back.
@@ -2185,7 +2197,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
                 if (shutterStartMs > 0L) StartupTrace.markShutter("dngReady", SystemClock.elapsedRealtime() - shutterStartMs, name)
-                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE), dngPending = dngPending)
+                val exposureNs = result.result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L
+                val postRawBoost = (result.result.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100) / 100f
+                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), exposureNs = exposureNs, postRawBoost = postRawBoost, flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE), dngPending = dngPending)
             } else {
                 val file = File(app.cacheDir, "$baseName-$shotId.dng")
                 val result = try {
@@ -2205,7 +2219,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     throw t
                 }
                 if (shutterStartMs > 0L) StartupTrace.markShutter("dngReady", SystemClock.elapsedRealtime() - shutterStartMs, "$baseName.dng")
-                Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE))
+                val exposureNs = result.result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L
+                val postRawBoost = (result.result.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST) ?: 100) / 100f
+                Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), exposureNs = exposureNs, postRawBoost = postRawBoost, flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE))
             }
         } finally {
             exposed.complete(Unit)

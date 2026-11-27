@@ -113,8 +113,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `PresetsPanel.kt` (top-bar mode like Crop & rotate, replaces the tabs while open), `PresetStore.kt`
   (`filesDir/presets.json`). Web mirrors these in `src/ui/pro/` (presets in localStorage).
 - `engine/src/main/java/app/rawboy/auto/` (shared by Auto and Camera) — `AutoAnalysis` (decode → 512 px copies →
-  skin → stats → auto develop; `Analysis`), `analysis/` (`SceneAnalyzer`: stats from the 512 px copy;
-  `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`), `looks/` (`Looks` catalogue on the bundled
+  skin → stats → auto develop; `Analysis`), `analysis/` (`SceneAnalyzer`: stats from the 512 px copy including
+  `blueSky`; `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`; `SceneRecognition`: extensible Camera
+  scene-recognition map `CameraScene` → `SceneAdjustment`, starting with `SUNNY_BLUE_SKY` +0.45 EV highlight-safe lift,
+  applied on Camera's live viewfinder and phone-AE shots on Android and iOS), `looks/` (`Looks` catalogue on the bundled
   LUTs, `LookApplier` = auto base + look × Strength + the user's `Adjustments`, `LookSuggester`).
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
   RawBoy edits in Auto (Android, web and RawBoy Desktop: `AutoPhoto.edits`, `LookApplier.applyEdits`/`applyEditsDevelop`; Desktop: Edit in Pro opens with `AutoPhoto.params`, To Auto calls `AutoViewModel.receiveEdits`, edited photos export through `PhotoSession` (`healNow`)): one photo's whole
@@ -1050,7 +1052,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   from the centre box only; other stats stay whole-frame (null = Auto's centre-weighted whole frame). Camera2 AE gets
   the same box as `CONTROL_AE_REGIONS`. While focus is locked by a tap both meter `MeterArea.Spot` (16% of the short
   side, shifted inside the frame): the live develop at the viewfinder point, the shot at that point turned by the
-  device rotation (`Spot.turned`; iOS reads `UIDevice.orientation`), since the photo is level and the viewfinder is
+  device rotation (`Spot.turned`; iOS uses `DeviceOrientationTracker` / CoreMotion gravity, shared with still capture and video), since the photo is level and the viewfinder is
   portrait. The front camera's preview crop isn't applied to the shot's spot (a few % off). Ports: `MeterArea.kt/.swift/.ts`.
 - Denoise coarse stage: `uDenoiseWide` = (denoise − 65) / 35 (`ShaderParams.wideDenoise`); luma 5×5 at stride 3,
   chroma 7×7 at stride 6 (18 px), range weights against the fine result. The sparse stages' taps are **jittered** per

@@ -139,7 +139,7 @@ struct CameraScreen: View {
             }
             .accessibilityLabel("Keep RAW (DNG)")
             Button(action: vm.togglePhotoFrame) {
-                Image(systemName: "photo.artframe")
+                Image(systemName: "rectangle.inset.filled")
                     .foregroundStyle(vm.settings.photoFrame != .none ? Color.cameraAccent : .white.opacity(0.6))
             }
             .accessibilityLabel("Frames")
