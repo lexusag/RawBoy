@@ -41,6 +41,8 @@ export class SceneStats {
     readonly skinLuminance: number,
     readonly iso: number,
     private readonly histogram: Int32Array,
+    /** Share of the frame that reads as bright blue sky (hue 185..255 deg, sat > 0.15, display brightness > 0.25). */
+    readonly blueSky: number = 0,
   ) {}
 
   /** p99 - p1 in EV. */
@@ -87,6 +89,7 @@ export function analyzeScene(base: PreviewImage, skin: SkinMask | null, iso: num
   let clipped = 0;
   let chromaSum = 0;
   let greenBlue = 0;
+  let blueSky = 0;
   let warm = 0;
   let skinSum = 0;
   let skinCount = 0;
@@ -131,8 +134,10 @@ export function analyzeScene(base: PreviewImage, skin: SkinMask | null, iso: num
       chromaSum += sat;
       if (sat > 0.15 && hi > 0.1) {
         const hue = hueDegrees(er, eg, eb);
-        if (hue >= 75 && hue <= 260) greenBlue++;
-        else if ((hue >= 0 && hue <= 60) || (hue >= 330 && hue <= 360)) warm++;
+        if (hue >= 75 && hue <= 260) {
+          greenBlue++;
+          if (hi > 0.25 && hue >= 185 && hue <= 255) blueSky++;
+        } else if ((hue >= 0 && hue <= 60) || (hue >= 330 && hue <= 360)) warm++;
       }
 
       if (useSkin) {
@@ -177,5 +182,6 @@ export function analyzeScene(base: PreviewImage, skin: SkinMask | null, iso: num
     skinCount > 0 ? skinSum / skinCount : 0,
     iso,
     histogram,
+    blueSky / n,
   );
 }

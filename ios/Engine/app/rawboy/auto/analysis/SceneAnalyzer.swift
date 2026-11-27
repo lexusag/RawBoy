@@ -26,6 +26,42 @@ public struct SceneStats: Sendable {
     public let iso: Float
     /** log2-luminance histogram, SceneAnalyzer.binsPerEv bins per EV from SceneAnalyzer.minLog. */
     let histogram: [Int]
+    /** Share of the frame that reads as bright blue sky (hue 185..255 deg, sat > 0.15, display brightness > 0.25). */
+    public let blueSky: Float
+
+    init(
+        key: Float,
+        p1: Float,
+        p5: Float,
+        p50: Float,
+        p98: Float,
+        p99: Float,
+        clipped: Float,
+        chroma: Float,
+        greenBlue: Float,
+        warm: Float,
+        faceArea: Float,
+        skinLuminance: Float,
+        iso: Float,
+        histogram: [Int],
+        blueSky: Float = 0
+    ) {
+        self.key = key
+        self.p1 = p1
+        self.p5 = p5
+        self.p50 = p50
+        self.p98 = p98
+        self.p99 = p99
+        self.clipped = clipped
+        self.chroma = chroma
+        self.greenBlue = greenBlue
+        self.warm = warm
+        self.faceArea = faceArea
+        self.skinLuminance = skinLuminance
+        self.iso = iso
+        self.histogram = histogram
+        self.blueSky = blueSky
+    }
 
     /** p99 - p1 in EV. */
     public var dynamicRange: Float { p99 - p1 }
@@ -61,6 +97,13 @@ public enum SceneAnalyzer {
     private static let kg: Float = 0.6780
     private static let kb: Float = 0.0593
 
+    // Bright blue-sky classification in display-encoded (gamma 2.2) opponent hue space:
+    // excludes foliage greens (< 185 deg), purples (> 255 deg), grey/overcast clouds (sat <= 0.15) and dark blues (hi <= 0.25).
+    static let blueSkyMinSat: Float = 0.15
+    static let blueSkyMinBrightness: Float = 0.25
+    static let blueSkyHueMin: Float = 185
+    static let blueSkyHueMax: Float = 255
+
     /**
      * [meter]: meter only that box (.centre, a tap's .spot): `key` and `p98` (which set exposure) come from it,
      * uniformly weighted; the other stats stay whole-frame. Nil: the centre-weighted whole frame.
@@ -75,6 +118,7 @@ public enum SceneAnalyzer {
         var clipped = 0
         var chromaSum = 0.0
         var greenBlue = 0
+        var blueSky = 0
         var warm = 0
         var skinSum = 0.0
         var skinCount = 0
@@ -118,10 +162,13 @@ public enum SceneAnalyzer {
                 let lo = min(er, min(eg, eb))
                 let sat = hi > 1e-4 ? (hi - lo) / hi : 0
                 chromaSum += Double(sat)
-                if sat > 0.15 && hi > 0.1 {
+                if sat > blueSkyMinSat && hi > 0.1 {
                     let hue = hueDegrees(er, eg, eb)
                     if (75...260).contains(hue) {
                         greenBlue += 1
+                        if hi > blueSkyMinBrightness && (blueSkyHueMin...blueSkyHueMax).contains(hue) {
+                            blueSky += 1
+                        }
                     } else if (0...60).contains(hue) || (330...360).contains(hue) {
                         warm += 1
                     }
@@ -168,7 +215,20 @@ public enum SceneAnalyzer {
             faceArea: faceArea,
             skinLuminance: skinCount > 0 ? Float(skinSum / Double(skinCount)) : 0,
             iso: iso,
-            histogram: histogram)
+            histogram: histogram,
+            blueSky: Float(blueSky) / Float(n))
+    }
+
+    /** Whether linear Rec.2020 (r, g, b) reads as bright blue sky under analyze's pixel rules. */
+    static func isBlueSky(_ r: Float, _ g: Float, _ b: Float) -> Bool {
+        let er = powf(max(r, 0), 1 / 2.2)
+        let eg = powf(max(g, 0), 1 / 2.2)
+        let eb = powf(max(b, 0), 1 / 2.2)
+        let hi = max(er, max(eg, eb))
+        let lo = min(er, min(eg, eb))
+        let sat = hi > 1e-4 ? (hi - lo) / hi : 0
+        return sat > blueSkyMinSat && hi > blueSkyMinBrightness
+            && (blueSkyHueMin...blueSkyHueMax).contains(hueDegrees(er, eg, eb))
     }
 
     private static func hueDegrees(_ r: Float, _ g: Float, _ b: Float) -> Float {

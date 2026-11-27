@@ -222,6 +222,8 @@ targets:
           - Fixtures  # read from the source tree (shared with RawBoy Viewer's tests), not bundled
           - EngineRealPreviewTests.swift  # Desktop's provider, macOS only
           - FilmstripSelectionTests.swift  # Desktop's filmstrip pick, macOS only
+      # Camera's orientation tracker and rotation math (pure Foundation).
+      - path: Camera/capture/CameraOrientation.swift
     dependencies:
       - package: RawBoyViewerPackages
         product: RawBoyBrowseKit
@@ -399,6 +401,8 @@ targets:
       - path: Desktop/EngineRealPreview.swift
       # Pro's filmstrip pick for batch exports (pure).
       - path: Desktop/FilmstripSelection.swift
+      # Camera's orientation tracker and rotation math (pure Foundation).
+      - path: Camera/capture/CameraOrientation.swift
     dependencies:
       - package: RawBoyViewerPackages
         product: ViewerImaging

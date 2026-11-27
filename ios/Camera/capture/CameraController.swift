@@ -28,6 +28,8 @@ final class CameraController: NSObject, @unchecked Sendable {
         /** As-shot white (CIE xy) from the camera's white balance gains. */
         var whiteXY: [Double]?
         var iso: Float = 0
+        /** Current exposure duration in seconds (0 = unknown), for scene recognition. */
+        var exposureSeconds: Float = 0
         /** The exposure target bias the camera applies (EV), from Brightness: see setExposureBias. */
         var compensationEv: Float = 0
         /** Faces in upright normalised coordinates (as shown). */
@@ -43,6 +45,8 @@ final class CameraController: NSObject, @unchecked Sendable {
     struct CaptureResult {
         let dng: Data
         let iso: Float
+        /** Exposure duration in seconds at the shutter (0 = unknown, falls back to DNG EXIF). */
+        let exposureSeconds: Float
         /** The exposure target bias the shot was taken with (EV): the develop takes it back out (AutoTone captureEv). */
         let compensationEv: Float
     }
@@ -102,7 +106,12 @@ final class CameraController: NSObject, @unchecked Sendable {
      */
     private var videoFormat = false
     private var input: AVCaptureDeviceInput?
-    private var rotation: AVCaptureDevice.RotationCoordinator?
+    /**
+     * `AVCaptureConnection.videoRotationAngle` that makes the active lens upright in portrait (90° on back lenses and
+     * iPhone ≤ 16 front; 0° on iPhone 17/Pro/Air front). Read from the fresh video connection's default angle in
+     * `orientConnection`, guarded by [queue].
+     */
+    private var portraitCaptureAngle = 90
     private var rawType: OSType?
     /**
      * The shutter sound can't be turned off: before iOS 18, or where the law requires it (Japan, Korea…), which
@@ -216,8 +225,6 @@ final class CameraController: NSObject, @unchecked Sendable {
         applyExposureBias(device)
         applyExposureLock(device)
 
-        rotation = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
-
         if videoFormat {
             // Video mode: the 1080p stream, upright 9:16 like the file; no stills.
             rawType = nil
@@ -262,16 +269,19 @@ final class CameraController: NSObject, @unchecked Sendable {
     /**
      * Frames in the sensor's own landscape orientation, unmirrored: the viewfinder turns them upright (and mirrors the
      * selfie camera) itself, see [viewfinderRotation]. Asking the connection to do it worked for the back lenses but
-     * left the selfie camera's frames sideways after a switch.
+     * left the selfie camera's frames sideways after a switch. Reads the connection's default `videoRotationAngle`
+     * before zeroing it so [portraitCaptureAngle] works across sensor mountings (including iPhone 17 front).
      */
     private func orientConnection(front: Bool) {
         guard let c = videoOutput.connection(with: .video) else { return }
+        let defaultAngle = Int(c.videoRotationAngle.rounded())
+        portraitCaptureAngle = CameraOrientation.portraitAngle(fromDefaultVideoAngle: defaultAngle)
         if c.isVideoMirroringSupported {
             c.automaticallyAdjustsVideoMirroring = false
             c.isVideoMirrored = false
         }
         if c.isVideoRotationAngleSupported(0) { c.videoRotationAngle = 0 }
-        Self.log.notice("viewfinder connection: rotation \(c.videoRotationAngle), mirrored \(c.isVideoMirrored)")
+        Self.log.notice("viewfinder connection: default \(defaultAngle), portraitCapture \(self.portraitCaptureAngle), rotation \(c.videoRotationAngle), mirrored \(c.isVideoMirrored)")
         applyVideoStabilization()
     }
 
@@ -520,11 +530,12 @@ final class CameraController: NSObject, @unchecked Sendable {
     // MARK: - Capture
 
     /**
-     * Takes a raw still; [onShutter] runs when the camera captures it (shutter feedback). [gps]: ImageIO's GPS
-     * dictionary for the DNG (LocationTracker.gpsMetadata), or nil. [shutterSound] false silences the system's click
-     * where that is allowed (shutterSoundRequired).
+     * Takes a raw still; [onShutter] runs when the camera captures it (shutter feedback). [deviceDegrees] is how the
+     * phone is held clockwise from upright portrait (0, 90, 180, 270). [gps]: ImageIO's GPS dictionary for the DNG
+     * (LocationTracker.gpsMetadata), or nil. [shutterSound] false silences the system's click where that is allowed
+     * (shutterSoundRequired).
      */
-    func captureDng(flash: FlashMode, shutterSound: Bool, gps: [String: Any]? = nil,
+    func captureDng(flash: FlashMode, shutterSound: Bool, deviceDegrees: Int = 0, gps: [String: Any]? = nil,
                     onShutter: @escaping @Sendable () -> Void) async throws -> CaptureResult {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<CaptureResult, Error>) in
             queue.async {
@@ -540,21 +551,28 @@ final class CameraController: NSObject, @unchecked Sendable {
                 if #available(iOS 18.0, *), self.photoOutput.isShutterSoundSuppressionSupported {
                     settings.isShutterSoundSuppressionEnabled = !shutterSound
                 }
-                // The photo's orientation: how the phone is held, level with the horizon.
-                if let angle = self.rotation?.videoRotationAngleForHorizonLevelCapture,
-                   let connection = self.photoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(angle) {
+                // The photo's orientation: how the phone is held, level with the horizon, relative to this sensor's
+                // portrait mounting angle (avoids RotationCoordinator resetting to portrait on lens switches or tilt).
+                let isFront = self.current?.isFront == true
+                let angle = CGFloat(CameraOrientation.photoRotationAngle(
+                    portraitAngle: self.portraitCaptureAngle, deviceDegrees: deviceDegrees, isFront: isFront))
+                if let connection = self.photoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(angle) {
                     connection.videoRotationAngle = angle
                     if connection.isVideoMirroringSupported {
                         connection.automaticallyAdjustsVideoMirroring = false
-                        connection.isVideoMirrored = self.current?.isFront == true
+                        connection.isVideoMirrored = isFront
                     }
+                    Self.log.notice("capture orientation: device \(deviceDegrees)°, portrait \(self.portraitCaptureAngle)°, front \(isFront) -> angle \(Int(angle))°")
                 }
                 let iso = self.input?.device.iso ?? 0
+                let rawDur = self.input?.device.exposureDuration.seconds ?? 0
+                let exposureSeconds: Float = rawDur.isFinite && rawDur > 0 ? Float(rawDur) : 0
                 let bias = self.input?.device.exposureTargetBias ?? 0
                 let delegate = PhotoDelegate(gps: gps, onShutter: onShutter) { [weak self] result in
                     self?.queue.async { self?.captures[settings.uniqueID] = nil }
                     switch result {
-                    case let .success(data): c.resume(returning: CaptureResult(dng: data, iso: iso, compensationEv: bias))
+                    case let .success(data):
+                        c.resume(returning: CaptureResult(dng: data, iso: iso, exposureSeconds: exposureSeconds, compensationEv: bias))
                     case let .failure(error): c.resume(throwing: error)
                     }
                 }
@@ -623,18 +641,33 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                 blueGain: min(Swift.max(gains.blueGain, 1), max))
             let xy = device.chromaticityValues(for: clamped)
             let iso = device.iso
+            let rawDur = device.exposureDuration.seconds
+            let exposureSeconds: Float = rawDur.isFinite && rawDur > 0 ? Float(rawDur) : 0
             let focusing = device.isAdjustingFocus
             let bias = device.exposureTargetBias
             stateLock.withLock {
                 state.compensationEv = bias
                 state.whiteXY = [Double(xy.x), Double(xy.y)]
                 state.iso = iso
+                state.exposureSeconds = exposureSeconds
                 state.focusing = focusing
             }
         }
         if logNextFrame {
             logNextFrame = false
-            Self.log.notice("first frame \(CVPixelBufferGetWidth(buffer))x\(CVPixelBufferGetHeight(buffer))")
+            let w = CVPixelBufferGetWidth(buffer)
+            let h = CVPixelBufferGetHeight(buffer)
+            Self.log.notice("first frame \(w)x\(h)")
+            if h > w {
+                // Defensive safeguard: if the sensor delivers an upright portrait buffer at rotation 0 (iPhone 17
+                // front) even if a connection was reused with angle 0, ensure portraitCaptureAngle stays 0.
+                let deviceId = input?.device.uniqueID
+                queue.async {
+                    guard self.current?.deviceId == deviceId, self.portraitCaptureAngle % 180 != 0 else { return }
+                    self.portraitCaptureAngle = 0
+                    Self.log.notice("corrected portraitCaptureAngle to 0 from portrait frame \(w)x\(h)")
+                }
+            }
         }
         onFrame?(buffer, CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
     }
