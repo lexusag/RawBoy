@@ -113,8 +113,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `PresetsPanel.kt` (top-bar mode like Crop & rotate, replaces the tabs while open), `PresetStore.kt`
   (`filesDir/presets.json`). Web mirrors these in `src/ui/pro/` (presets in localStorage).
 - `engine/src/main/java/app/rawboy/auto/` (shared by Auto and Camera) — `AutoAnalysis` (decode → 512 px copies →
-  skin → stats → auto develop; `Analysis`), `analysis/` (`SceneAnalyzer`: stats from the 512 px copy;
-  `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`), `looks/` (`Looks` catalogue on the bundled
+  skin → stats → auto develop; `Analysis`), `analysis/` (`SceneAnalyzer`: stats from the 512 px copy including
+  `blueSky`; `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`; `SceneRecognition`: extensible Camera
+  scene-recognition map `CameraScene` → `SceneAdjustment`, starting with `SUNNY_BLUE_SKY` +0.45 EV highlight-safe lift,
+  applied on Camera's live viewfinder and phone-AE shots on Android and iOS), `looks/` (`Looks` catalogue on the bundled
   LUTs, `LookApplier` = auto base + look × Strength + the user's `Adjustments`, `LookSuggester`).
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
   RawBoy edits in Auto (Android, web and RawBoy Desktop: `AutoPhoto.edits`, `LookApplier.applyEdits`/`applyEditsDevelop`; Desktop: Edit in Pro opens with `AutoPhoto.params`, To Auto calls `AutoViewModel.receiveEdits`, edited photos export through `PhotoSession` (`healNow`)): one photo's whole

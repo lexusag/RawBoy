@@ -1,7 +1,10 @@
 package app.rawboy.camera
 
 import app.rawboy.auto.analysis.AutoTone
+import app.rawboy.auto.analysis.SceneLight
+import app.rawboy.auto.analysis.SceneRecognition
 import app.rawboy.auto.analysis.SceneStats
+import app.rawboy.develop.DevelopParams
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,6 +55,32 @@ class LiveExposureTest {
         }
     }
 
+    @Test
+    fun sunnyBlueSkyBrightnessStepDoesNotOvershoot() {
+        val baseStats = stats(0.06f, p98 = -1.2f, blueSky = 0.25f)
+        val baseLight = SceneLight(exposureSeconds = 1f / 1000f, captureEv = 0f)
+        val baseAuto = SceneRecognition.apply(AutoTone.develop(baseStats, DevelopParams(), phoneAe = true), baseStats, baseLight)
+        assertEquals(0.45f, baseAuto.exposure, 1e-5f)
+
+        val normal = 0.06f * 2f.pow(baseAuto.exposure)
+        var last: Float? = baseAuto.exposure
+        var lastCapture = 0f
+        val shown = (0 until 6).map { i ->
+            val stepEv = if (i == 0) 1f else 2f
+            val rawKey = 0.06f * 2f.pow(stepEv)
+            val s = stats(rawKey, p98 = -1.2f + stepEv, blueSky = 0.25f)
+            val light = SceneLight(exposureSeconds = (1f / 1000f) * 2f.pow(stepEv), captureEv = 2f)
+            val auto = SceneRecognition.apply(AutoTone.develop(s, DevelopParams(), phoneAe = true, captureEv = 2f), s, light)
+            val e = LiveExposure.ease(last, lastCapture, auto.exposure, 2f, 0.3f)
+            last = e
+            lastCapture = 2f
+            log2(rawKey * 2f.pow(e + 3f) / normal)
+        }
+        shown.forEach { assertTrue("overshoot $it: $shown", it <= 3.05f) }
+        shown.drop(1).forEach { assertEquals(3f, it, 0.05f) }
+    }
+
     /** A scene of key [key] with nothing else that moves the exposure (no face, highlights far below clip). */
-    private fun stats(key: Float) = SceneStats(key, -8f, -7f, -5f, -3f, -2.5f, 0f, 0.1f, 0f, 0f, 0f, 0f, 100f, IntArray(1))
+    private fun stats(key: Float, p98: Float = -3f, blueSky: Float = 0f) =
+        SceneStats(key, -8f, -7f, -5f, p98, p98 + 0.5f, 0f, 0.1f, blueSky, 0f, 0f, 0f, 50f, IntArray(1), blueSky)
 }

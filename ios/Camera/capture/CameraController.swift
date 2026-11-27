@@ -28,6 +28,8 @@ final class CameraController: NSObject, @unchecked Sendable {
         /** As-shot white (CIE xy) from the camera's white balance gains. */
         var whiteXY: [Double]?
         var iso: Float = 0
+        /** Current exposure duration in seconds (0 = unknown), for scene recognition. */
+        var exposureSeconds: Float = 0
         /** The exposure target bias the camera applies (EV), from Brightness: see setExposureBias. */
         var compensationEv: Float = 0
         /** Faces in upright normalised coordinates (as shown). */
@@ -43,6 +45,8 @@ final class CameraController: NSObject, @unchecked Sendable {
     struct CaptureResult {
         let dng: Data
         let iso: Float
+        /** Exposure duration in seconds at the shutter (0 = unknown, falls back to DNG EXIF). */
+        let exposureSeconds: Float
         /** The exposure target bias the shot was taken with (EV): the develop takes it back out (AutoTone captureEv). */
         let compensationEv: Float
     }
@@ -561,11 +565,14 @@ final class CameraController: NSObject, @unchecked Sendable {
                     Self.log.notice("capture orientation: device \(deviceDegrees)°, portrait \(self.portraitCaptureAngle)°, front \(isFront) -> angle \(Int(angle))°")
                 }
                 let iso = self.input?.device.iso ?? 0
+                let rawDur = self.input?.device.exposureDuration.seconds ?? 0
+                let exposureSeconds: Float = rawDur.isFinite && rawDur > 0 ? Float(rawDur) : 0
                 let bias = self.input?.device.exposureTargetBias ?? 0
                 let delegate = PhotoDelegate(gps: gps, onShutter: onShutter) { [weak self] result in
                     self?.queue.async { self?.captures[settings.uniqueID] = nil }
                     switch result {
-                    case let .success(data): c.resume(returning: CaptureResult(dng: data, iso: iso, compensationEv: bias))
+                    case let .success(data):
+                        c.resume(returning: CaptureResult(dng: data, iso: iso, exposureSeconds: exposureSeconds, compensationEv: bias))
                     case let .failure(error): c.resume(throwing: error)
                     }
                 }
@@ -634,12 +641,15 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
                 blueGain: min(Swift.max(gains.blueGain, 1), max))
             let xy = device.chromaticityValues(for: clamped)
             let iso = device.iso
+            let rawDur = device.exposureDuration.seconds
+            let exposureSeconds: Float = rawDur.isFinite && rawDur > 0 ? Float(rawDur) : 0
             let focusing = device.isAdjustingFocus
             let bias = device.exposureTargetBias
             stateLock.withLock {
                 state.compensationEv = bias
                 state.whiteXY = [Double(xy.x), Double(xy.y)]
                 state.iso = iso
+                state.exposureSeconds = exposureSeconds
                 state.focusing = focusing
             }
         }

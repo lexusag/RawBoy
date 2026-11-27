@@ -115,6 +115,8 @@ final class CameraViewModel: ObservableObject {
         let viewfinderKey: Float?
         /** Sensor ISO from the capture, in case the DNG lacks it. */
         let iso: Float
+        /** Exposure duration in seconds at the shutter (0 = unknown, falls back to DNG EXIF). */
+        let exposureSeconds: Float
         /** Exposure target bias the shot was taken with (Brightness), taken back out by the develop. */
         let compensationEv: Float
         /** The camera saw a face at the shutter: run skin detection. */
@@ -487,7 +489,11 @@ final class CameraViewModel: ObservableObject {
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
             let captureEv = state.compensationEv
-            let auto = AutoTone.develop(stats, asShot: defaults, phoneAe: true, captureEv: captureEv, splitLuma: false)
+            let sceneLight = SceneLight(exposureSeconds: state.exposureSeconds, postRawBoost: 1, captureEv: captureEv)
+            let auto = SceneRecognition.apply(
+                AutoTone.develop(stats, asShot: defaults, phoneAe: true, captureEv: captureEv, splitLuma: false),
+                stats: stats,
+                light: sceneLight)
             await MainActor.run {
                 guard let self else { return }
                 self.analysing = false
@@ -1096,7 +1102,7 @@ final class CameraViewModel: ObservableObject {
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
-                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, viewfinderExposure: live?.auto.exposure ?? 0, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered))
+                                  iso: result.iso, exposureSeconds: result.exposureSeconds, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, viewfinderExposure: live?.auto.exposure ?? 0, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered))
                 developNext()
             } catch {
                 Self.log.error("capture: \(error.localizedDescription)")
@@ -1178,7 +1184,13 @@ final class CameraViewModel: ObservableObject {
                     let a = AutoAnalysis.analyze(img, label: shot.name, noiseIsoScale: noiseScale, fallbackIso: shot.iso,
                                                  detectSkin: shot.mayHaveFace, meter: shot.meter, phoneAe: true,
                                                  captureEv: shot.compensationEv, splitLuma: false)
-                    var params = s.develop(a.autoBase, hasFace: a.stats.hasFace)
+                    let exifExp = img.shotInfo.exposureTime
+                    let exposureSeconds: Float = shot.exposureSeconds > 0
+                        ? shot.exposureSeconds
+                        : (exifExp.isFinite && exifExp > 0 ? Float(exifExp) : 0)
+                    let sceneLight = SceneLight(exposureSeconds: exposureSeconds, postRawBoost: 1, captureEv: shot.compensationEv)
+                    let autoBase = SceneRecognition.apply(a.autoBase, stats: a.stats, light: sceneLight)
+                    var params = s.develop(autoBase, hasFace: a.stats.hasFace)
                     // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
                     params.denoise = max(params.denoise, Self.highIsoDenoise(a.stats.iso * noiseScale))
                     params.colorDenoise = max(Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise) ?? params.denoise,

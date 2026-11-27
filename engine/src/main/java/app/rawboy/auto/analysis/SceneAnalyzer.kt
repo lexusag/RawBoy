@@ -38,6 +38,8 @@ class SceneStats(
     val iso: Float,
     /** log2-luminance histogram, [SceneAnalyzer.BINS_PER_EV] bins per EV from [SceneAnalyzer.MIN_LOG]. */
     private val histogram: IntArray,
+    /** Share of the frame that reads as bright blue sky (hue 185..255 deg, sat > 0.15, display brightness > 0.25). */
+    val blueSky: Float = 0f,
 ) {
     /** p99 - p1 in EV. */
     val dynamicRange: Float get() = p99 - p1
@@ -70,6 +72,13 @@ object SceneAnalyzer {
     private const val KG = 0.6780f
     private const val KB = 0.0593f
 
+    // Bright blue-sky classification in display-encoded (gamma 2.2) opponent hue space:
+    // excludes foliage greens (< 185 deg), purples (> 255 deg), grey/overcast clouds (sat <= 0.15) and dark blues (hi <= 0.25).
+    internal const val BLUE_SKY_MIN_SAT = 0.15f
+    internal const val BLUE_SKY_MIN_BRIGHTNESS = 0.25f
+    internal const val BLUE_SKY_HUE_MIN = 185f
+    internal const val BLUE_SKY_HUE_MAX = 255f
+
     /**
      * [meter]: meter only that box ([MeterArea.Centre], a tap's [MeterArea.Spot]): `key` and `p98` (which set
      * exposure) come from it, uniformly weighted; the other stats stay whole-frame. Null: the centre-weighted whole frame.
@@ -84,6 +93,7 @@ object SceneAnalyzer {
         var clipped = 0
         var chromaSum = 0.0
         var greenBlue = 0
+        var blueSky = 0
         var warm = 0
         var skinSum = 0.0
         var skinCount = 0
@@ -126,9 +136,13 @@ object SceneAnalyzer {
                 val lo = min(er, min(eg, eb))
                 val sat = if (hi > 1e-4f) (hi - lo) / hi else 0f
                 chromaSum += sat
-                if (sat > 0.15f && hi > 0.1f) {
-                    when (hueDegrees(er, eg, eb)) {
-                        in 75f..260f -> greenBlue++
+                if (sat > BLUE_SKY_MIN_SAT && hi > 0.1f) {
+                    val hue = hueDegrees(er, eg, eb)
+                    when (hue) {
+                        in 75f..260f -> {
+                            greenBlue++
+                            if (hi > BLUE_SKY_MIN_BRIGHTNESS && hue in BLUE_SKY_HUE_MIN..BLUE_SKY_HUE_MAX) blueSky++
+                        }
                         in 0f..60f, in 330f..360f -> warm++
                     }
                 }
@@ -176,7 +190,19 @@ object SceneAnalyzer {
             skinLuminance = if (skinCount > 0) (skinSum / skinCount).toFloat() else 0f,
             iso = iso,
             histogram = histogram,
+            blueSky = blueSky.toFloat() / n,
         )
+    }
+
+    /** Whether linear Rec.2020 ([r], [g], [b]) reads as bright blue sky under [analyze]'s pixel rules. */
+    internal fun isBlueSky(r: Float, g: Float, b: Float): Boolean {
+        val er = r.coerceAtLeast(0f).pow(1 / 2.2f)
+        val eg = g.coerceAtLeast(0f).pow(1 / 2.2f)
+        val eb = b.coerceAtLeast(0f).pow(1 / 2.2f)
+        val hi = max(er, max(eg, eb))
+        val lo = min(er, min(eg, eb))
+        val sat = if (hi > 1e-4f) (hi - lo) / hi else 0f
+        return sat > BLUE_SKY_MIN_SAT && hi > BLUE_SKY_MIN_BRIGHTNESS && hueDegrees(er, eg, eb) in BLUE_SKY_HUE_MIN..BLUE_SKY_HUE_MAX
     }
 
     private fun log2(v: Float): Float = (ln(v.toDouble()) / ln(2.0)).toFloat()
