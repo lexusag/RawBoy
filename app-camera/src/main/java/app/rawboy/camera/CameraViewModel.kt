@@ -510,21 +510,46 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Experimental: a stabilized copy after each recording with motion data ([VideoStabilizer]). */
     fun setVideoStabilizeAfter(on: Boolean) = change { it.copy(videoStabilizeAfter = on) }
 
+    /** Rebuilds the camera session when the lens's hardware/dual-pixel depth stream turns on, off or changes. */
+    private fun syncDepthStream(prev: CameraSettings, next: CameraSettings) {
+        if (_recordingMs.value != null) return
+        val inf = info
+        val hadStream = inf?.takeIf { !it.hiRes }?.let {
+            depthStream(prev)?.usable(it.hasHardwareDepth, controller.dualPixelUsable(it))
+        }?.takeIf { it != DepthSource.AI }
+        val wantsStream = inf?.takeIf { !it.hiRes }?.let {
+            depthStream(next)?.usable(it.hasHardwareDepth, controller.dualPixelUsable(it))
+        }?.takeIf { it != DepthSource.AI }
+        controller.setCaptureDepth(depthStream(next))
+        if (hadStream != wantsStream && surfaceTexture != null && _status.value == CameraStatus.READY) {
+            if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+        }
+    }
+
     /** Experimental: save an upright depth map in the DNG file for portrait blur in RawBoy Pro. */
-    fun setSaveDepth(on: Boolean) = change { it.copy(saveDepth = on) }
+    fun setSaveDepth(on: Boolean) {
+        val prev = _settings.value
+        change { it.copy(saveDepth = on) }
+        syncDepthStream(prev, _settings.value)
+    }
 
     /** The active lens has a dual-pixel calibration ([app.rawboy.camera.depth.DepthCalibrationActivity]): its depth maps carry millimetres. */
     fun dualPixelCalibrated(): Boolean = info?.let { DualPixelCalibrations.get(app, it.physicalId ?: it.openId) } != null
 
     /** Experimental: where the saved depth map comes from ([DepthSource]). */
-    fun setDepthSource(source: DepthSource) = change { it.copy(depthSource = source) }
+    fun setDepthSource(source: DepthSource) {
+        val prev = _settings.value
+        change { it.copy(depthSource = source) }
+        syncDepthStream(prev, _settings.value)
+    }
 
     /**
-     * The top bar's Portrait button: on = Save depth map and Generate portrait in camera together; off = no portrait
-     * blur (the depth map keeps being saved if it was on before).
+     * The top bar's Portrait button: toggles Save depth map and Generate portrait in camera on and off together.
      */
-    fun togglePortrait() = change {
-        if (it.saveDepth && it.depthPortrait) it.copy(depthPortrait = false) else it.copy(saveDepth = true, depthPortrait = true)
+    fun togglePortrait() {
+        val prev = _settings.value
+        change { it.togglePortrait() }
+        syncDepthStream(prev, _settings.value)
     }
 
     /** Experimental, with [setSaveDepth]: apply portrait bokeh blur in camera when a person or pet is detected. */

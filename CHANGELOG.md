@@ -1,3 +1,8 @@
+**Camera: Portrait toggle also disables depth map saving (Android, 2026-11-26)**
+
+- Turning the top-bar **Portrait** button off now switches off both **Save depth map in DNG** and **Generate portrait in camera** (`CameraSettings.togglePortrait`), instead of leaving depth map capture enabled on subsequent normal shots. Changing depth settings or toggling Portrait also syncs the camera's hardware/dual-pixel depth stream (`CameraViewModel.syncDepthStream`) when the active lens's stream changes (no restart when using AI depth).
+- Code: `CameraSettings.kt`, `CameraViewModel.kt`, `CameraScreen.kt`, `Help.kt`, `StringsUk.kt`; docs (`docs/camera.md`, `docs/features-camera.md`). Tests: `CameraSettingsTest`, `StringsTest`.
+
 **Camera: Fast Street Photo Mode and instant startup pipeline (Android, 2026-11-26)**
 
 - **Universal fast-start pipeline (all modes):** `FastLensCache` persists the active lens descriptor keyed by `Build.FINGERPRINT` so startup opens the camera immediately without waiting ~1.7 s for full multi-camera discovery (other lenses, selfie and depth populate asynchronously after `READY`); `CameraActivity.onCreate` preopens the camera device and preloads the active film stock / LUT before Compose and EGL finish; `GlProgramCache` persists linked GLES 3.0 binaries (`glProgramBinary`) and lazily compiles optional shaders while `FastPreviewProgram` draws frame 0 live before first-frame analysis completes; pressing shutter or volume during `OPENING` queues one shot to fire as soon as the first frame arrives; single-frame 16-bit RAW captures copy pixels off `captureLock` before the ~24 MB DNG write; `baseline-prof.txt` pre-compiles startup classes; `StartupTrace` logs launch and shutter milestones under `RawBoyStartup`.
