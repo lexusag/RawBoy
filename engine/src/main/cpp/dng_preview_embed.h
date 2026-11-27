@@ -58,7 +58,10 @@ inline bool parseJpegFrame(const uint8_t* d, size_t n, uint32& w, uint32& h, uin
     return false;
 }
 
-/** Wraps an already-encoded upright sRGB JPEG as a primary DNG preview and appends it to [previews]. */
+/**
+ * Wraps an already-encoded sRGB JPEG (in the negative's native/sensor orientation, matching IFD0's Orientation tag)
+ * as a primary DNG preview and appends it to [previews].
+ */
 inline bool appendJpegPreview(dng_host& host, const uint8_t* jpeg, size_t size, const char* appName,
                               dng_preview_list& previews) {
     uint32 w = 0, h = 0, sh = 1, sv = 1;

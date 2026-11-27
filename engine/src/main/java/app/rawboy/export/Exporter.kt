@@ -121,12 +121,17 @@ class Exporter(private val context: Context) {
     /**
      * Develops [image] with [params] as a plain sRGB JPEG (jpegli, no EXIF/gain map) into a [ByteArray], without
      * creating a MediaStore entry. Used to build the embedded preview JPEG for DNG files.
+     *
+     * When [dngOrientation] is in `2..8` (the destination DNG's IFD0 Orientation tag, `image.lens.orientation`), the
+     * rendered upright pixels are inverse-oriented back into sensor orientation before encoding so viewers applying
+     * IFD0's Orientation display the preview upright.
      */
     fun exportJpegBytes(
         image: RawImage,
         params: ShaderParams,
         settings: ExportSettings,
         gpu: ExportGpu? = null,
+        dngOrientation: Int = 1,
         onProgress: (Float) -> Unit = {},
     ): ByteArray {
         this.gpu = gpu
@@ -136,23 +141,60 @@ class Exporter(private val context: Context) {
         val isMono = params.saturation <= -100f || (params.lutAmount >= 100f && app.rawboy.auto.looks.Looks.isMonochromeLut(params.lut?.id))
         val resolved = settings.resolveFrame(image, exifDate = settings.captureDate, monochrome = isMono)
         val dateStamp = if (resolved.pentax645 == null) resolved.dateStamp else ""
+        val inv = PreviewOrientation.inverse(dngOrientation)
+        val (outW, outH) = PreviewOrientation.outputSize(size.first, size.second, inv)
         val tmp = java.io.File.createTempFile("rb-preview-", ".jpg", context.cacheDir)
         try {
-            ParcelFileDescriptor.open(
-                tmp,
-                ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE,
-            ).use { pfd ->
-                val handle = JpegNative.begin(pfd.fd, size.first, size.second, resolved.jpegQuality)
-                try {
-                    renderOutput(
-                        image, params, size, resolved.downscaleSharpen,
-                        dateStamp, resolved.dateStampStyle, resolved.pentax645, resolved.monochromeImprint, onProgress,
-                    ) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
-                } catch (t: Throwable) {
-                    JpegNative.abort(handle)
-                    throw t
+            if (inv == 1) {
+                ParcelFileDescriptor.open(
+                    tmp,
+                    ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE,
+                ).use { pfd ->
+                    val handle = JpegNative.begin(pfd.fd, outW, outH, resolved.jpegQuality)
+                    try {
+                        renderOutput(
+                            image, params, size, resolved.downscaleSharpen,
+                            dateStamp, resolved.dateStampStyle, resolved.pentax645, resolved.monochromeImprint, onProgress,
+                        ) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
+                    } catch (t: Throwable) {
+                        JpegNative.abort(handle)
+                        throw t
+                    }
+                    JpegNative.finish(handle)
                 }
-                JpegNative.finish(handle)
+            } else {
+                val rgb8 = ByteArray(outW * outH * 3)
+                renderOutput(
+                    image, params, size, resolved.downscaleSharpen,
+                    dateStamp, resolved.dateStampStyle, resolved.pentax645, resolved.monochromeImprint, onProgress,
+                ) { y, rows, band ->
+                    PreviewOrientation.scatterBandToRgb8(band, y, rows, size.first, size.second, inv, rgb8)
+                }
+                ParcelFileDescriptor.open(
+                    tmp,
+                    ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE,
+                ).use { pfd ->
+                    val handle = JpegNative.begin(pfd.fd, outW, outH, resolved.jpegQuality)
+                    try {
+                        val stripRows = 64
+                        val strip = ShortArray(outW * stripRows * 3)
+                        var y = 0
+                        while (y < outH) {
+                            val rows = minOf(stripRows, outH - y)
+                            val count = outW * rows * 3
+                            val base = y * outW * 3
+                            for (i in 0 until count) {
+                                strip[i] = ((rgb8[base + i].toInt() and 0xff) * 257).toShort()
+                            }
+                            JpegNative.writeRows(handle, strip, rows)
+                            y += rows
+                        }
+                    } catch (t: Throwable) {
+                        JpegNative.abort(handle)
+                        throw t
+                    }
+                    JpegNative.finish(handle)
+                }
             }
             return tmp.readBytes()
         } finally {

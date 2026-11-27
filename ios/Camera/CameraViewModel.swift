@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreImage
 import CoreMotion
 import Foundation
 import ImageIO
@@ -1256,7 +1257,7 @@ final class CameraViewModel: ObservableObject {
         let lut = try await preliminary.lut.asyncMap { try await loadLut($0) }
         let film = try await preliminary.film.asyncMap { try await loadFilm($0) }
         let gpu = exportGpu
-        let outcome = try await withCheckedThrowingContinuation { (c: CheckedContinuation<(jpeg: URL?, preview: Data?, dng: Data?, rawKey: Float), Error>) in
+        let outcome = try await withCheckedThrowingContinuation { (c: CheckedContinuation<(jpeg: URL?, preview: Data?, dng: Data?, rawKey: Float, orientation: Int), Error>) in
             developQueue.async {
                 do {
                     let decodeStart = Date()
@@ -1339,6 +1340,7 @@ final class CameraViewModel: ObservableObject {
                     let exportStart = Date()
                     var jpegURL: URL?
                     var previewData: Data?
+                    let dngOrientation = img.lens.orientation
                     if s.saveJpeg {
                         let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
                                                          naming: Self.jpegNaming, gpu: gpu)
@@ -1346,13 +1348,13 @@ final class CameraViewModel: ObservableObject {
                         if s.embedDngPreview {
                             let jpegSmallerThanPreview = s.maxLongSide != nil && previewMaxLongSide != nil && previewMaxLongSide! > s.maxLongSide!
                             if jpegSmallerThanPreview {
-                                previewData = try Exporter().exportJpegData(img, params: shader, settings: previewSettings, gpu: gpu)
+                                previewData = try Exporter().exportJpegData(img, params: shader, settings: previewSettings, gpu: gpu, dngOrientation: dngOrientation)
                             } else {
-                                previewData = Self.makePreviewJpeg(from: file, maxLongSide: previewMaxLongSide, quality: CameraSettings.rawPreviewQuality)
+                                previewData = Self.makePreviewJpeg(from: file, maxLongSide: previewMaxLongSide, quality: CameraSettings.rawPreviewQuality, dngOrientation: dngOrientation)
                             }
                         }
                     } else if s.embedDngPreview {
-                        previewData = try Exporter().exportJpegData(img, params: shader, settings: previewSettings, gpu: gpu)
+                        previewData = try Exporter().exportJpegData(img, params: shader, settings: previewSettings, gpu: gpu, dngOrientation: dngOrientation)
                     }
                     Self.log.notice("\(shot.name): decode \(decodeMs) ms, develop + JPEG \(Int(Date().timeIntervalSince(exportStart) * 1000)) ms")
 
@@ -1371,7 +1373,7 @@ final class CameraViewModel: ObservableObject {
                             dngData = shot.dng
                         }
                     }
-                    c.resume(returning: (jpegURL, previewData, dngData, a.stats.key))
+                    c.resume(returning: (jpegURL, previewData, dngData, a.stats.key, dngOrientation))
                 } catch {
                     c.resume(throwing: error)
                 }
@@ -1384,7 +1386,7 @@ final class CameraViewModel: ObservableObject {
             #endif
             try await PhotoLibraryOutput.save(jpeg, naming: Self.jpegNaming)
         } else if let preview = outcome.preview {
-            lastShot = UIImage(data: preview)?.preparingThumbnail(of: CGSize(width: 160, height: 160))
+            lastShot = Self.orientedThumbnail(preview, exifOrientation: outcome.orientation)
         }
         if let dngData = outcome.dng {
             try dngData.write(to: dngURL)
@@ -1394,25 +1396,51 @@ final class CameraViewModel: ObservableObject {
         if let key = shot.viewfinderKey { calibrate(rawKey: outcome.rawKey, viewfinderKey: key, lens: s.lensKey, scaleAtShutter: s.previewScale) }
     }
 
-    /** Downscales (if needed) and re-encodes the saved JPEG at [quality] for embedding as a DNG preview. */
-    private nonisolated static func makePreviewJpeg(from jpegURL: URL, maxLongSide: Int?, quality: Int) -> Data? {
+    /**
+     * Downscales (if needed), inverse-orients into the DNG's sensor orientation ([dngOrientation]), and re-encodes the
+     * saved upright JPEG at [quality] for embedding as a DNG preview.
+     */
+    private nonisolated static func makePreviewJpeg(from jpegURL: URL, maxLongSide: Int?, quality: Int, dngOrientation: Int) -> Data? {
         guard let src = CGImageSourceCreateWithURL(jpegURL as CFURL, nil) else { return nil }
-        let cgImage: CGImage?
+        let decoded: CGImage?
         if let maxLongSide {
             let opts: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
                 kCGImageSourceCreateThumbnailWithTransform: true,
                 kCGImageSourceThumbnailMaxPixelSize: maxLongSide,
             ]
-            cgImage = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
+            decoded = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
         } else {
-            cgImage = CGImageSourceCreateImageAtIndex(src, 0, nil)
+            decoded = CGImageSourceCreateImageAtIndex(src, 0, nil)
         }
-        guard let cgImage else { return nil }
+        guard var cgImage = decoded else { return nil }
+        let inv = PreviewOrientation.inverse(dngOrientation)
+        if inv != 1 {
+            let oriented = CIImage(cgImage: cgImage).oriented(forExifOrientation: Int32(inv))
+            if let rendered = CIContext(options: [.useSoftwareRenderer: false]).createCGImage(oriented, from: oriented.extent) {
+                cgImage = rendered
+            }
+        }
         let out = NSMutableData()
         guard let dest = CGImageDestinationCreateWithData(out as CFMutableData, "public.jpeg" as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(dest, cgImage, [kCGImageDestinationLossyCompressionQuality: Double(quality) / 100] as CFDictionary)
         return CGImageDestinationFinalize(dest) ? out as Data : nil
+    }
+
+    private nonisolated static func orientedThumbnail(_ preview: Data, exifOrientation: Int) -> UIImage? {
+        guard let raw = UIImage(data: preview), let cg = raw.cgImage else { return nil }
+        let uiOrient: UIImage.Orientation
+        switch exifOrientation {
+        case 2: uiOrient = .upMirrored
+        case 3: uiOrient = .down
+        case 4: uiOrient = .downMirrored
+        case 5: uiOrient = .leftMirrored
+        case 6: uiOrient = .right
+        case 7: uiOrient = .rightMirrored
+        case 8: uiOrient = .left
+        default: uiOrient = .up
+        }
+        return UIImage(cgImage: cg, scale: 1, orientation: uiOrient).preparingThumbnail(of: CGSize(width: 160, height: 160))
     }
 
     /**

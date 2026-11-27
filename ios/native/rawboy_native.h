@@ -161,7 +161,8 @@ RB_API void rb_pack_free(uint8_t* buffer);
 // ---- DNG preview embedding (RawBoy Camera; needs Adobe DNG SDK) ----
 
 /**
- * Re-saves [dng] with [previewJpeg] (an upright sRGB JPEG) embedded as its primary DNG preview.
+ * Re-saves [dng] with [previewJpeg] (an sRGB JPEG in the negative's native/sensor orientation, matching IFD0's
+ * Orientation tag) embedded as its primary DNG preview.
  * Returns 0 on success (*out is a malloc'd buffer of *outSize bytes, free with rb_dng_free),
  * 1 if unchanged, 2 if built without the Adobe DNG SDK, or -1 on error (with [error] populated).
  */

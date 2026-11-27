@@ -2,7 +2,8 @@ import Foundation
 import RawBoyNative
 
 /**
- * Re-saves a DNG with an upright sRGB JPEG embedded as its primary preview (Adobe DNG SDK, `dng_transcode.cpp`).
+ * Re-saves a DNG with an sRGB JPEG (in the negative's native/sensor orientation, matching IFD0's Orientation tag)
+ * embedded as its primary preview (Adobe DNG SDK, `dng_transcode.cpp`).
  */
 public enum DngPreview {
     public struct Error: LocalizedError {

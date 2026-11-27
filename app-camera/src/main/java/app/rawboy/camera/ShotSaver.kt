@@ -50,6 +50,7 @@ import app.rawboy.export.Pentax645Field
 import app.rawboy.export.Pentax645Frame
 import app.rawboy.export.Pentax645Info
 import app.rawboy.export.PhotoFrame
+import app.rawboy.export.PreviewOrientation
 import app.rawboy.film.FilmData
 import app.rawboy.film.FilmStocks
 import app.rawboy.gl.ShaderParams
@@ -678,21 +679,23 @@ internal object ShotSaver {
                 // on the CPU to avoid a second GPU develop pass.
                 val jpegMaxLongSide = s.maxLongSide
                 val jpegSmallerThanPreview = jpegMaxLongSide != null && previewMaxLongSide != null && previewMaxLongSide > jpegMaxLongSide
+                val dngOrientation = p.image.lens.orientation
                 previewJpeg = if (jpegSmallerThanPreview) {
                     withContext(developDispatcher) {
-                        Exporter(app).exportJpegBytes(p.image, p.shader, previewExport, exportGpu(shot))
+                        Exporter(app).exportJpegBytes(p.image, p.shader, previewExport, exportGpu(shot), dngOrientation = dngOrientation)
                     }
                 } else {
                     withContext(Dispatchers.IO) {
-                        makePreviewJpeg(app, saved.uri, previewMaxLongSide, CameraSettings.RAW_PREVIEW_QUALITY)
+                        makePreviewJpeg(app, saved.uri, previewMaxLongSide, CameraSettings.RAW_PREVIEW_QUALITY, dngOrientation = dngOrientation)
                     }
                 }
             }
             withContext(Dispatchers.IO) { thumbnail(app, saved.uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(saved.uri, it)) }
         } else if (previewExport != null) {
+            val dngOrientation = p.image.lens.orientation
             previewJpeg = withContext(developDispatcher) {
                 val exportStart = System.nanoTime()
-                Exporter(app).exportJpegBytes(p.image, p.shader, previewExport, exportGpu(shot))
+                Exporter(app).exportJpegBytes(p.image, p.shader, previewExport, exportGpu(shot), dngOrientation = dngOrientation)
                     .also {
                         val took = ms(exportStart)
                         Log.d(TAG, "${shot.name}: develop + DNG preview (${it.size / 1024} KB) $took ms")
@@ -700,7 +703,7 @@ internal object ShotSaver {
                     }
             }
             Log.d(TAG, "prepared DNG preview for ${shot.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
-            withContext(Dispatchers.IO) { thumbnailFromBytes(previewJpeg) }?.let {
+            withContext(Dispatchers.IO) { thumbnailFromBytes(previewJpeg, exifOrientation = dngOrientation) }?.let {
                 _lastShot.value = SavedShot(shot.id, LastShot(shot.dng, it))
             }
         }
@@ -757,32 +760,60 @@ internal object ShotSaver {
             .onFailure { Log.w(TAG, "DNG publish $dng", it) }
     }
 
-    /** Downscales (if needed) and re-encodes the saved JPEG at [quality] for embedding as a clean SDR DNG preview. */
-    private fun makePreviewJpeg(app: Context, jpegUri: Uri, maxLongSide: Int?, quality: Int): ByteArray? = runCatching {
+    /**
+     * Downscales (if needed), inverse-orients into the DNG's sensor orientation ([dngOrientation]), and re-encodes the
+     * saved upright JPEG at [quality] for embedding as a clean SDR DNG preview.
+     */
+    private fun makePreviewJpeg(app: Context, jpegUri: Uri, maxLongSide: Int?, quality: Int, dngOrientation: Int): ByteArray? = runCatching {
         val bmp = app.contentResolver.openInputStream(jpegUri)?.use { BitmapFactory.decodeStream(it) } ?: return null
         try {
             val w = bmp.width
             val h = bmp.height
             val longSide = max(w, h)
-            val scaled = if (maxLongSide != null && longSide > maxLongSide) {
-                val scale = maxLongSide.toFloat() / longSide
-                Bitmap.createScaledBitmap(bmp, (w * scale).roundToInt().coerceAtLeast(1), (h * scale).roundToInt().coerceAtLeast(1), true)
+            val needScale = maxLongSide != null && longSide > maxLongSide
+            val inv = PreviewOrientation.inverse(dngOrientation)
+            val transformed = if (needScale || inv != 1) {
+                val matrix = orientationMatrix(inv)
+                if (needScale) {
+                    val scale = maxLongSide!!.toFloat() / longSide
+                    matrix.preScale(scale, scale)
+                }
+                Bitmap.createBitmap(bmp, 0, 0, w, h, matrix, true)
             } else bmp
             try {
                 ByteArrayOutputStream().also { out ->
-                    scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                    transformed.compress(Bitmap.CompressFormat.JPEG, quality, out)
                 }.toByteArray()
             } finally {
-                if (scaled !== bmp) scaled.recycle()
+                if (transformed !== bmp) transformed.recycle()
             }
         } finally {
             bmp.recycle()
         }
     }.getOrNull()
 
-    private fun thumbnailFromBytes(jpeg: ByteArray): Bitmap? = runCatching {
-        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, BitmapFactory.Options().apply { inSampleSize = 16 })
+    private fun thumbnailFromBytes(jpeg: ByteArray, exifOrientation: Int = 1): Bitmap? = runCatching {
+        val raw = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, BitmapFactory.Options().apply { inSampleSize = 16 })
+            ?: return null
+        if (exifOrientation !in 2..8) return raw
+        try {
+            Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, orientationMatrix(exifOrientation), true)
+        } finally {
+            raw.recycle()
+        }
     }.getOrNull()
+
+    private fun orientationMatrix(exifOrientation: Int): android.graphics.Matrix = android.graphics.Matrix().apply {
+        when (exifOrientation) {
+            2 -> postScale(-1f, 1f)
+            3 -> postRotate(180f)
+            4 -> postScale(1f, -1f)
+            5 -> { postRotate(90f); postScale(-1f, 1f) }
+            6 -> postRotate(90f)
+            7 -> { postRotate(270f); postScale(-1f, 1f) }
+            8 -> postRotate(270f)
+        }
+    }
 
     /** Appends [depth] (`"RBDP"` trailer, [DngDepth]) to the saved DNG file at [dng]. Best effort. */
     private fun writeDepthToDng(app: Context, dng: Uri, depth: DepthMap) {

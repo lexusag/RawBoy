@@ -105,9 +105,14 @@ public final class Exporter {
     /**
      * Develops [image] with [params] as a plain sRGB JPEG (jpegli, no EXIF) into [Data], without saving to Photos.
      * Used to build the embedded preview JPEG for DNG files.
+     *
+     * When [dngOrientation] is in `2...8` (the destination DNG's IFD0 Orientation tag, `image.lens.orientation`), the
+     * rendered upright pixels are inverse-oriented back into sensor orientation before encoding so viewers applying
+     * IFD0's Orientation display the preview upright.
      */
     public func exportJpegData(_ image: RawImage, params: ShaderParams, settings: ExportSettings,
-                               gpu: ExportGpu? = nil, onProgress: (Float) -> Void = { _ in }) throws -> Data {
+                               gpu: ExportGpu? = nil, dngOrientation: Int = 1,
+                               onProgress: (Float) -> Void = { _ in }) throws -> Data {
         self.gpu = gpu
         let scan = settings.filmScan && ScanScale.applies(params)
         scanExport = scan
@@ -117,10 +122,49 @@ public final class Exporter {
         let isMono = params.saturation <= -100 || (params.lutAmount >= 100 && Looks.isMonochromeLut(params.lut?.id))
         let resolved = settings.resolveFrame(image: image, exifDate: settings.captureDate ?? image.metadata.dateTimeOriginal, monochrome: isMono)
         let dateStamp = resolved.pentax645 == nil ? resolved.dateStamp : ""
+        let inv = PreviewOrientation.inverse(dngOrientation)
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("rb-preview-\(UUID().uuidString).jpg")
         defer { try? FileManager.default.removeItem(at: tmp) }
-        try writeJpegli(image, tmp, params, size, size, resolved.jpegQuality, resolved.downscaleSharpen,
-                        dateStamp, resolved.dateStampStyle, resolved.pentax645, resolved.monochromeImprint, onProgress)
+        if inv == 1 {
+            try writeJpegli(image, tmp, params, size, size, resolved.jpegQuality, resolved.downscaleSharpen,
+                            dateStamp, resolved.dateStampStyle, resolved.pentax645, resolved.monochromeImprint, onProgress)
+        } else {
+            let (outW, outH) = PreviewOrientation.outputSize(width: size.0, height: size.1, orientation: inv)
+            var rgb8 = [UInt8](repeating: 0, count: outW * outH * 3)
+            try rgb8.withUnsafeMutableBufferPointer { dst in
+                guard let base = dst.baseAddress else { return }
+                try renderOutput(image, params, size, resolved.downscaleSharpen, dateStamp, resolved.dateStampStyle,
+                                 resolved.pentax645, resolved.monochromeImprint, onProgress) { y, rows, band in
+                    PreviewOrientation.scatterBandToRgb8(band: band, y: y, rows: rows, srcWidth: size.0, srcHeight: size.1,
+                                                         orientation: inv, dst: base)
+                }
+            }
+            var error = [CChar](repeating: 0, count: 256)
+            guard let encoder = rb_jpeg_begin(tmp.path, Int32(outW), Int32(outH), Int32(resolved.jpegQuality), &error, error.count)
+            else { throw MetalError(message: String(cString: error)) }
+            do {
+                let stripRows = 64
+                var strip = [UInt16](repeating: 0, count: outW * stripRows * 3)
+                var y = 0
+                while y < outH {
+                    let rows = min(stripRows, outH - y)
+                    let count = outW * rows * 3
+                    let base = y * outW * 3
+                    for i in 0..<count {
+                        strip[i] = UInt16(rgb8[base + i]) * 257
+                    }
+                    let ok = strip.withUnsafeBufferPointer { buf in
+                        rb_jpeg_write_rows(encoder, buf.baseAddress, Int32(rows), &error, error.count)
+                    }
+                    if !ok { throw MetalError(message: String(cString: error)) }
+                    y += rows
+                }
+            } catch {
+                rb_jpeg_abort(encoder)
+                throw error
+            }
+            if !rb_jpeg_finish(encoder, &error, error.count) { throw MetalError(message: String(cString: error)) }
+        }
         return try Data(contentsOf: tmp)
     }
 

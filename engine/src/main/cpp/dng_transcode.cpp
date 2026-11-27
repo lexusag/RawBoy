@@ -1,6 +1,7 @@
 // Re-saves a DNG through the Adobe DNG SDK, optionally compressing a 2x2 Bayer mosaic as lossy JPEG XL (DNG 1.7.1,
-// RawBoy Camera Settings: "Lossy JPEG XL") and/or embedding an already-encoded upright sRGB JPEG preview (RawBoy
-// Camera's developed look preview). Compiled only when the SDK is present in third_party/dng_sdk.
+// RawBoy Camera Settings: "Lossy JPEG XL") and/or embedding an already-encoded sRGB JPEG preview (in the negative's
+// native/sensor orientation so IFD0's Orientation tag displays it upright). Compiled only when the SDK is present in
+// third_party/dng_sdk.
 // This product includes DNG technology under license by Adobe.
 // Licences: licenses/THIRD_PARTY_NOTICES.txt.
 
