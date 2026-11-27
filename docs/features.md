@@ -260,8 +260,8 @@ Left out on purpose: Google Drive, Video, ZIP export, the web caches and lanes, 
 
 ## Keeping this file honest
 
-When a feature lands, change its cell here in the same PR as the `CHANGELOG.md` entry (CHANGELOG is the source for
-"Since"). To re-derive the release of an entry: `git blame -L<line>,<line> CHANGELOG.md` for the commit, then
-`git tag --contains <commit> --sort=creatordate | head -1`. Lines whose commit is v1.1.1 are the squashed baseline.
+When a feature lands, change its cell here in the same PR as the changelog fragment in `changelog/` (fragments are
+rolled into `CHANGELOG.md`, which is the source for "Since"). To re-derive the release of an entry: `git log --diff-filter=A --format=%H -1 -- changelog/<file>.md` (or `git blame -L<line>,<line> CHANGELOG.md` for archived entries) for
+the commit, then `git tag --contains <commit> --sort=creatordate | head -1`. Lines whose commit is v1.1.1 are the squashed baseline.
 A cheap check for Swift parity with the web: compare `DevelopParams` fields, `PresetGroup`s and `handleAuto` /
 `handleEditor` keys with their web counterparts (`web/src/engine/develop/`, `ProApp.tsx`, `AutoApp.tsx`).

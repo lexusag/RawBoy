@@ -39,6 +39,7 @@ jobs:
       engine: ${{ steps.filter.outputs.engine }}
       desktop: ${{ steps.filter.outputs.desktop }}
       ios: ${{ steps.filter.outputs.ios }}
+      changelog: ${{ steps.filter.outputs.changelog }}
     steps:
       - uses: actions/checkout@v7
 
@@ -102,6 +103,12 @@ jobs:
               - 'engine/src/main/assets/models/**'
               - 'licenses/**'
               - 'engine/src/main/cpp/**'
+              - '.github/workflows/ci.yml'
+            # Changelog fragments and rollup tooling.
+            changelog:
+              - 'changelog/**'
+              - 'CHANGELOG.md'
+              - 'tools/changelog/**'
               - '.github/workflows/ci.yml'
 
   web:
@@ -350,12 +357,30 @@ jobs:
             grep -q "BUILD SUCCEEDED" "$log" || { grep -E "error:" -B2 -A6 "$log" | head -300; exit 1; }
           done
 
+  changelog:
+    name: Changelog check
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.changelog == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Validate changelog fragments and run rollup tests
+        run: |
+          node tools/changelog/rollup.mjs --check
+          node --test tools/changelog/test.mjs
+
   # The one required check. Passes when every needed job succeeded or was skipped (nothing relevant changed);
   # fails when any failed or was cancelled. `always()` makes it run (and report) even when a dependency is skipped;
   # it runs on pull requests only.
   pr-check:
     name: pr-check
-    needs: [changes, web, android, desktop, ios]
+    needs: [changes, web, android, desktop, ios, changelog]
     # Only meaningful (and only required) on pull requests; pushes to main run the jobs above without it.
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest

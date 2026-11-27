@@ -1,7 +1,7 @@
 # CLAUDE.md
 
 Guidance for working on RawBoy. Features and slider semantics live in `docs/` (linked from
-`Readme.md`), the changelog in `CHANGELOG.md`; this file covers how the code fits together, how
+`Readme.md`), the changelog in `changelog/` (per-change entries, rolled into `CHANGELOG.md`); this file covers how the code fits together, how
 to test, and the traps already found.
 
 ## What it is
@@ -1132,6 +1132,6 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - **Camera features doc:** whenever a camera feature is added, changed, removed or ported between Android and iOS, update `docs/features-camera.md` in the same change (the feature row, the Android/iOS marks, and the "What iOS lacks" list), as well as `docs/camera.md`.
 - **Camera translations:** whenever user-visible text is added or changed in the Android camera (anything passed through `tr("...")`), add or update its Ukrainian line in `StringsUk.kt` in the same change, and keep `StringsTest` passing. iOS isn't translated yet; a future iOS String Catalog needs the same treatment.
 - **Features doc:** whenever a feature of Pro, Auto, Browse, Packer or Desktop is added, changed, removed or ported between platforms, update `docs/features.md` (the feature row and the platform marks) in the same change.
-- Update the docs with each user-visible change: the app's page in `docs/` (RawBoy's controls table is
-  `docs/rawboy.md`) and a new entry at the top of `CHANGELOG.md`. The owner commits.
+- **Changelog:** for each user-visible change, add a new file `changelog/YYYY-MM-DD-<short-slug>.md` (lowercase kebab-case slug, same entry format as `CHANGELOG.md`: bold heading `**Title (platforms, YYYY-MM-DD)**`, blank line, `- ` bullets; see `changelog/README.md`) — **never prepend to `CHANGELOG.md` in a PR**, so parallel PRs do not conflict. Run `node tools/changelog/rollup.mjs --check` to validate, and `node tools/changelog/rollup.mjs` to fold pending fragments into `CHANGELOG.md` periodically.
+- Update the docs with each user-visible change: the app's page in `docs/` (RawBoy's controls table is `docs/rawboy.md`) and a new fragment in `changelog/`. The owner commits.
 - `UI.md` is the backlog of UI proposals not done yet (from the 2026-10-17 review); remove an item when it lands.

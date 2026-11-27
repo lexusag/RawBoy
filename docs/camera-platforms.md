@@ -176,7 +176,7 @@ after `STANDARD` failed definitely. The device report's *Video probe* section an
    layer, and the same checks on a Pixel (Tensor must not move). Settings' *Phone profile* line and the `RawBoyPlatform`
    log line show the layers applied. Debug builds can take the phone for another chip (Settings › *Take the phone
    for*, from the next start) to compare profiles on one phone; their calibration is stored apart.
-6. Document it here (the table, the phone's section) and in `CHANGELOG.md`.
+6. Document it here (the table, the phone's section) and in a new entry file under `changelog/`.
 
 ### Assumptions the shared code still makes
 
