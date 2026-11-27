@@ -73,6 +73,15 @@ struct DeviceOrientationTracker: Equatable, Sendable {
         self.degrees = Self.normalize(degrees)
     }
 
+    /**
+     * Marks any previous gravity reading as stale (called when pausing/backgrounding CoreMotion) so the next session
+     * can re-seed while flat and snaps immediately on the first fresh non-flat sample without hysteresis against the
+     * previous session's orientation.
+     */
+    mutating func invalidateGravity() {
+        hasGravityReading = false
+    }
+
     private static func quadrant(for angle: Double) -> Int {
         (Int(((angle + 45.0) / 90.0).rounded(.down)) % 4) * 90
     }

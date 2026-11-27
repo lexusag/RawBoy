@@ -119,6 +119,32 @@ final class CameraOrientationTests: XCTestCase {
         XCTAssertEqual(tracker.degrees, 90)
     }
 
+    func testInvalidateGravityAllowsReseedAndImmediateSnap() {
+        var tracker = DeviceOrientationTracker()
+        tracker.update(ax: 1, ay: 0, az: 0)
+        XCTAssertEqual(tracker.degrees, 90)
+        XCTAssertTrue(tracker.hasGravityReading)
+
+        // Simulating backgrounding stops CoreMotion and invalidates gravity freshness.
+        tracker.invalidateGravity()
+        XCTAssertFalse(tracker.hasGravityReading)
+        XCTAssertEqual(tracker.degrees, 90)
+
+        // Resuming while flat can re-seed instead of staying stuck in the previous session's landscape angle.
+        tracker.seed(degrees: 0)
+        tracker.update(ax: 0, ay: 0, az: -1)
+        XCTAssertEqual(tracker.degrees, 0)
+        XCTAssertFalse(tracker.hasGravityReading)
+
+        // First fresh non-flat sample snaps immediately at 45° (without 55° hysteresis against stale state).
+        let r40 = 40.0 * .pi / 180.0
+        tracker.invalidateGravity()
+        tracker.seed(degrees: 90)
+        tracker.update(ax: sin(r40), ay: -cos(r40), az: 0)
+        XCTAssertEqual(tracker.degrees, 0)
+        XCTAssertTrue(tracker.hasGravityReading)
+    }
+
     func testPortraitAngleFromDefaultVideoAngle() {
         // Back lenses & iPhone ≤ 16 front: default 0° -> portrait 90°.
         XCTAssertEqual(CameraOrientation.portraitAngle(fromDefaultVideoAngle: 0), 90)
