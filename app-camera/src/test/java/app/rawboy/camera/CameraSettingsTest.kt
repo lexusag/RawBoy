@@ -57,6 +57,44 @@ class CameraSettingsTest {
     }
 
     @Test
+    fun streetModeForcesFastSingleFrameAndKeepsStoredValues() {
+        val pro = CameraSettings(
+            brightness = 30f, warmth = -15f, keepDng = true, burstMode = BurstMode.ON,
+            flash = app.rawboy.camera.capture.FlashMode.FOCUS_FLASH, maxRes = true,
+            selfTimer = 5, longExposure = 10, experimental = true, randomLightLeak = true,
+            hdrGainMap = true, scanQr = true, trackFocus = true, flatVideo = true,
+            videoMotionData = true, rawViewfinder = true, zslBurst = true, saveDepth = true,
+            depthPortrait = true, showHistogram = true, showGrid = true, showLevel = true,
+            showZoomControl = true, lens = "UW", film = false,
+        )
+        assertTrue(pro.streetOnPowerLaunch)
+        assertTrue(pro.streetZsl)
+        // Ephemeral Street session overrides without mutating settings.street.
+        val s = pro.effectiveFor(streetActive = true)
+        assertEquals(0f, s.brightness)
+        assertEquals(0f, s.warmth)
+        assertEquals(BurstMode.OFF, s.burstMode)
+        assertEquals(app.rawboy.camera.capture.FlashMode.OFF, s.flash)
+        assertFalse(s.maxRes || s.hdrGainMap || s.scanQr || s.randomLightLeak || s.rawViewfinder || s.zslBurst)
+        assertFalse(s.trackFocus || s.flatVideo || s.videoMotionData || s.saveDepth || s.depthPortrait)
+        assertFalse(s.showHistogram || s.showZoomControl)
+        assertEquals(0, s.activeSelfTimer)
+        // Easy-mode look handling: Colour = default film stock; B&W = Film + B&W default mono stock.
+        assertTrue(s.filmMode)
+        assertEquals(Edition.filmLook(Edition.defaultFilmLookId), s.look)
+        val bw = pro.copy(streetMono = true).effectiveFor(streetActive = true)
+        assertTrue(bw.filmMono)
+        assertEquals(Edition.monoLook(Edition.defaultMonoLookId), bw.look)
+        // Preserves framing guides, RAW choice, and lens.
+        assertTrue(s.showGrid)
+        assertTrue(s.showLevel)
+        assertTrue(s.keepDng)
+        assertEquals("UW", s.lens)
+        // Stored values remain intact when Street session ends.
+        assertEquals(pro, pro.effectiveFor(streetActive = false))
+    }
+
+    @Test
     fun defaultsHaveFramesDisabled() {
         val s = CameraSettings()
         assertEquals(PhotoFrame.NONE, s.photoFrame)

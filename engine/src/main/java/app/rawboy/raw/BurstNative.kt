@@ -57,6 +57,12 @@ object BurstNative {
      */
     @JvmStatic external fun ringDrainTo(ringHandle: Long, mergerHandle: Long, orderedTimestamps: LongArray): LongArray
 
+    /**
+     * Copies one buffered frame matching [timestampNs] (or the newest when 0) into the direct [dest] buffer without
+     * emptying the ring. Returns the copied frame's timestamp, or 0 if unavailable.
+     */
+    @JvmStatic external fun ringCopyFrame(handle: Long, timestampNs: Long, dest: ByteBuffer): Long
+
     /** Releases all buffered frames immediately (pause, lens switch, low memory). */
     @JvmStatic external fun ringClear(handle: Long)
 

@@ -66,6 +66,7 @@ fun Viewfinder(
     rawFrames: RawPreviewFrames? = null,
     videoSink: VideoSink? = null,
     videoMode: Boolean = false,
+    fastMono: Boolean = false,
     eglConfig: ViewfinderEglConfig? = null,
 ) {
     key(eglConfig) {
@@ -79,7 +80,14 @@ fun Viewfinder(
                 onSurfaceTexture = { surfaceCallback.value(it) },
                 requestRender = { view[0]?.requestRender() },
                 onBase = { w, h, rgba, ns -> baseCallback.value(w, h, rgba, ns) },
-            )
+            ).apply {
+                onSurfaceReady = { ms, hits, misses ->
+                    app.rawboy.camera.StartupTrace.mark("shadersReady", "${ms}ms cache=$hits/$misses")
+                }
+                onFirstFrame = { developed ->
+                    app.rawboy.camera.StartupTrace.mark(if (developed) "firstLookFrame" else "firstVisibleFrame")
+                }
+            }
         }
 
         AndroidView(
@@ -133,6 +141,10 @@ fun Viewfinder(
         }
         LaunchedEffect(videoMode) {
             renderer.animateGrain = videoMode
+            view[0]?.requestRender()
+        }
+        LaunchedEffect(fastMono) {
+            renderer.fastMono = fastMono
             view[0]?.requestRender()
         }
         LaunchedEffect(loupe) {

@@ -105,7 +105,8 @@ class CameraActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        onLaunch(intent, fresh = savedInstanceState == null)
+        val hasCameraPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        onLaunch(intent, fresh = savedInstanceState == null, hasCameraPerm = hasCameraPerm)
         ContextCompat.registerReceiver(this, onDream, IntentFilter(Intent.ACTION_DREAMING_STARTED).apply { addAction(Intent.ACTION_DREAMING_STOPPED) }, ContextCompat.RECEIVER_NOT_EXPORTED)
         lifecycleScope.launch {
             viewModel.capturing.collect { count ->
@@ -133,7 +134,7 @@ class CameraActivity : ComponentActivity() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             viewModel.onAudioPermission(true)
         }
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+        if (hasCameraPerm) {
             viewModel.onPermission(true)
         } else {
             permission.launch(Manifest.permission.CAMERA)
@@ -143,13 +144,33 @@ class CameraActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        onLaunch(intent, fresh = true)
+        val hasCameraPerm = ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        onLaunch(intent, fresh = true, hasCameraPerm = hasCameraPerm)
     }
 
-    private fun onLaunch(intent: Intent?, fresh: Boolean) {
+    private fun onLaunch(intent: Intent?, fresh: Boolean, hasCameraPerm: Boolean) {
         closeAfterCapture = false
         stoppedOverLockScreen = false
-        val secure = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
+        val action = intent?.action
+        val secure = action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
+        val powerLaunch = secure || action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA
+        val streetShortcut = action == ACTION_STREET
+        if (fresh) {
+            when {
+                streetShortcut -> viewModel.setStreetSession(true)
+                powerLaunch && viewModel.settings.value.streetOnPowerLaunch -> viewModel.setStreetSession(true)
+                else -> viewModel.setStreetSession(false)
+            }
+        }
+        val source = when {
+            streetShortcut -> "street-shortcut"
+            secure -> "power-secure"
+            powerLaunch -> "power"
+            else -> "main"
+        }
+        StartupTrace.beginLaunch(source, viewModel.isStreetActive)
+        // Start camera HAL power-up and LUT preload immediately before Compose layout and EGL context creation.
+        viewModel.prewarm(hasCameraPerm)
         // The secure action on an unlocked phone (Settings' "Lock screen camera" choice) is an ordinary launch.
         overLockScreen = secure && getSystemService(KeyguardManager::class.java).isKeyguardLocked
         // Only the secure launch shows over the lock screen. The manifest allows it for every launch (a secure launch
@@ -373,6 +394,11 @@ class CameraActivity : ComponentActivity() {
         super.onStart()
         stoppedOverLockScreen = false
         if (overLockScreen && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) leaveLockScreen()
+    }
+
+    companion object {
+        /** Intent action used by the Street home-screen shortcut and Quick Settings tile. */
+        const val ACTION_STREET = "app.rawboy.camera.ACTION_STREET"
     }
 }
 

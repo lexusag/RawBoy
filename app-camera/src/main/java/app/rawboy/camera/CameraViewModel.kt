@@ -26,8 +26,12 @@ import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.depth.DualPixelCalibrations
 import app.rawboy.camera.capture.CameraController
+import app.rawboy.camera.capture.FastLensCache
+import app.rawboy.camera.capture.FastLensEntry
 import app.rawboy.camera.capture.MotionRecording
 import app.rawboy.camera.capture.MotionSensors
+import app.rawboy.camera.capture.SnapFocus
+import app.rawboy.camera.capture.StreetShutter
 import app.rawboy.camera.stab.VideoStabilizer
 import app.rawboy.camera.capture.ViewfinderGain
 import app.rawboy.camera.platform.ActivePlatform
@@ -56,6 +60,7 @@ import app.rawboy.export.DngGps
 import app.rawboy.export.ExifMetadata
 import app.rawboy.export.MediaStoreOutput
 import app.rawboy.export.OutputNaming
+import app.rawboy.gl.GlProgramCache
 import app.rawboy.gl.PreviewImage
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.ThumbnailRenderer
@@ -90,6 +95,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.async
@@ -152,30 +158,70 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Settings offers the raw viewfinder (the phone profile's [app.rawboy.camera.platform.PreviewProfile.rawViewfinder]). */
     val rawViewfinderAvailable: Boolean get() = platform.preview.rawViewfinder
 
-    private fun rawViewfinderOn(s: CameraSettings) = s.rawViewfinder && platform.preview.rawViewfinder
+    private fun rawViewfinderOn(s: CameraSettings) = s.effectiveFor(isStreetActive).rawViewfinder && platform.preview.rawViewfinder
+
+    /** Ephemeral Street mode session (e.g. double-press power button or Street shortcut) without mutating stored settings. */
+    private val _streetSession = MutableStateFlow(false)
+
+    private val _settings = MutableStateFlow(CameraSettingsStore.load(application, platform.calibrationSlot, platform.preview.level))
+    val settings = _settings.asStateFlow()
+
+    /** Whether Street mode is currently active (either persistent in Settings or activated for this launch). */
+    val streetActive: StateFlow<Boolean> = combine(_settings, _streetSession) { s, sess -> s.street || sess }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, _settings.value.street)
+
+    val isStreetActive: Boolean get() = _settings.value.street || _streetSession.value
+
+    /** The settings in effect: [settings] with Street or Easy mode's forced values while active. */
+    private val current: CameraSettings get() = _settings.value.effectiveFor(isStreetActive)
+
+    /** Active lens supports manual Snap Focus (non-fixed-focus lens) and whether its distance scale is calibrated. */
+    private val _canSnapFocus = MutableStateFlow(true)
+    val canSnapFocus = _canSnapFocus.asStateFlow()
+    private val _focusCalibrated = MutableStateFlow(true)
+    val focusCalibrated = _focusCalibrated.asStateFlow()
+
+    /** A shutter press arrived while the camera was still opening and will fire automatically as soon as it is ready. */
+    private var queuedShutterAt = 0L
+    private val _shutterQueued = MutableStateFlow(false)
+    val shutterQueued = _shutterQueued.asStateFlow()
 
     /**
-     * Whether the experimental continuous RAW ring buffer should be streaming right now: gated on the phone profile's
-     * RAW streaming support, not in video / flash / max-res / long-exposure, and in AUTO only while the scene is dark.
+     * Whether the experimental continuous RAW ring buffer should be streaming for ZSL burst stacking right now.
      */
     private fun zslBurstOn(s: CameraSettings, lowLightNow: Boolean = lowLight.value): Boolean {
-        val e = s.effective
+        val e = s.effectiveFor(isStreetActive)
         return platform.preview.rawViewfinder && e.zslBurst && !_videoMode.value &&
             e.burstMode.merges(lowLightNow) && e.flash == FlashMode.OFF && !e.maxRes &&
             !(e.experimental && e.longExposure > 0)
     }
 
-    private fun syncRawRing(lowLightNow: Boolean = lowLight.value) {
-        controller.setRawRing(zslBurstOn(_settings.value, lowLightNow))
+    /** Lightweight 3-frame continuous RAW ring buffer for 0 ms shutter lag in Street mode. */
+    private fun streetZslOn(s: CameraSettings = _settings.value): Boolean {
+        val e = s.effectiveFor(isStreetActive)
+        return isStreetActive && s.streetZsl && platform.preview.rawViewfinder && !_videoMode.value && !e.maxRes
     }
 
-    /** Releases buffered ZSL ring frames under Android memory pressure; next shot falls back to a normal burst. */
+    private fun syncRawRing(lowLightNow: Boolean = lowLight.value) {
+        val s = _settings.value
+        when {
+            streetZslOn(s) -> controller.setRawRing(true, capacity = CameraController.STREET_RING_CAPACITY)
+            zslBurstOn(s, lowLightNow) -> controller.setRawRing(true, capacity = CameraController.RAW_RING_CAPACITY)
+            else -> controller.setRawRing(false)
+        }
+    }
+
+    private fun syncSnapFocus() {
+        controller.setSnapFocus(if (isStreetActive) _settings.value.streetSnapFocus else SnapFocus.AF)
+    }
+
+    /** Releases buffered ZSL ring frames under Android memory pressure; next shot falls back to a normal capture. */
     fun onLowMemory() {
         controller.clearRawRing()
     }
 
     /** The depth stream the controller should add to stills: the chosen source while Save depth map is on. */
-    private fun depthStream(s: CameraSettings): DepthSource? = s.effective.takeIf { it.saveDepth }?.depthSource
+    private fun depthStream(s: CameraSettings): DepthSource? = s.effectiveFor(isStreetActive).takeIf { it.saveDepth }?.depthSource
 
     /**
      * Settings › Share device report: gathers [DeviceReportCollector]'s report into a text file in the cache (one,
@@ -216,12 +262,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         .runningFold(false) { prev, f -> if (f == null) prev else LowLight.next(prev, f.iso, f.exposureNs, f.postRawBoost) }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
-
-    private val _settings = MutableStateFlow(CameraSettingsStore.load(application, platform.calibrationSlot, platform.preview.level))
-    val settings = _settings.asStateFlow()
-
-    /** The settings in effect: [settings] with Easy mode's forced values while it is on ([CameraSettings.effective]). */
-    private val current: CameraSettings get() = _settings.value.effective
 
     init {
         Strings.choose(_settings.value.language)
@@ -777,15 +817,24 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var live: Live? = null
     private var liveJob: Job? = null
 
+    /** Background full lens discovery started after a fast cached open reaches READY. */
+    private var backgroundLensJob: Job? = null
+
     init {
+        GlProgramCache.init(app.cacheDir)
         DebugProbe.init(app)
         TuningData.init(app)
         ShotSaver.attachView()
         controller.rawFrames = rawFrames
         controller.setRawViewfinder(rawViewfinderOn(_settings.value))
         syncRawRing()
-        val maxRes = _settings.value.maxRes
-        lensPrefetch = viewModelScope.async(Dispatchers.Default) { discoverLenses(maxRes) }
+        syncSnapFocus()
+        // Only start eager full multi-camera discovery if we don't have a cached fast-start lens entry.
+        val target = _settings.value
+        val maxRes = target.effectiveFor(isStreetActive).maxRes
+        if (FastLensCache.load(app, target.front, target.lens, maxRes) == null) {
+            lensPrefetch = viewModelScope.async(Dispatchers.Default) { discoverLenses(maxRes) }
+        }
         viewModelScope.launch(Dispatchers.Main.immediate) {
             lowLight.collect { syncRawRing(it) }
         }
@@ -800,6 +849,92 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
         viewModelScope.launch(Dispatchers.Main.immediate) {
             ShotSaver.errors.collect { _message.value = it }
+        }
+    }
+
+    /**
+     * Called early from `CameraActivity.onCreate` / `onNewIntent` before Compose and EGL finish initializing:
+     * configures the ephemeral Street session, preopens the cached camera device in parallel with UI inflation,
+     * and preloads the active film/LUT asset into RAM so frame 2 develops without disk I/O.
+     */
+    fun prewarm(hasCameraPermission: Boolean) {
+        preloadActiveLook()
+        if (!hasCameraPermission || info != null) return
+        val s = _settings.value
+        val maxRes = s.effectiveFor(isStreetActive).maxRes
+        val cached = FastLensCache.load(app, s.front, s.lens, maxRes)
+            ?: FastLensCache.load(app, false, "W", maxRes)
+        if (cached != null) {
+            controller.preopen(cached.targetOpenId)
+        } else if (lensPrefetch == null && lensesBySide == null) {
+            lensPrefetch = viewModelScope.async(Dispatchers.Default) { discoverLenses(maxRes) }
+        }
+    }
+
+    /** Loads the active look's film stock or LUT into [ShotSaver]'s memory cache off the main thread. */
+    private fun preloadActiveLook() {
+        val look = current.look
+        viewModelScope.launch(Dispatchers.IO) {
+            look.film?.let { runCatching { ShotSaver.loadFilm(app, it) } }
+            look.lutId?.let { runCatching { ShotSaver.loadLut(app, it) } }
+        }
+    }
+
+    /**
+     * Activates or clears the ephemeral Street session (e.g. power-button double-press or Street shortcut) without
+     * mutating [CameraSettings.street]. Returns whether Street mode is now active.
+     */
+    fun setStreetSession(on: Boolean): Boolean {
+        val wasActive = isStreetActive
+        if (_streetSession.value == on) return wasActive
+        val prev = current
+        _streetSession.value = on
+        val nowActive = isStreetActive
+        if (wasActive != nowActive) applyStreetTransition(prev, current, nowActive)
+        return nowActive
+    }
+
+    /** Leaves Street mode for the full camera (clears both ephemeral launch session and persistent toggle). */
+    fun exitStreetMode() {
+        val prev = current
+        val wasActive = isStreetActive
+        _streetSession.value = false
+        if (_settings.value.street) {
+            change { it.copy(street = false) }
+        }
+        if (wasActive && !isStreetActive) {
+            applyStreetTransition(prev, current, nowActive = false)
+        }
+    }
+
+    private fun applyStreetTransition(prev: CameraSettings, next: CameraSettings, nowActive: Boolean) {
+        if (nowActive && _videoMode.value && _recordingMs.value == null) {
+            _videoMode.value = false
+            setExposureLock(false)
+        }
+        if (prev.activeSelfTimer > 0 && next.activeSelfTimer == 0) cancelSelfTimer()
+        if (prev.trackFocus && !next.trackFocus && _tracking.value) _focusPoint.value?.let { (x, y) -> focusAt(x, y) }
+        if (!next.showHistogram) _histogram.value = null
+        if (!next.scanQr) clearQr()
+        if (prev.videoMotionData != next.videoMotionData) applyStabilization()
+        controller.setExposureBias(exposureBias(next))
+        controller.setRawViewfinder(rawViewfinderOn(_settings.value))
+        syncRawRing()
+        syncSnapFocus()
+        preloadActiveLook()
+        republish()
+        val needsRestart = prev.maxRes != next.maxRes ||
+            prev.rawViewfinder != next.rawViewfinder ||
+            (prev.saveDepth != next.saveDepth || prev.depthSource != next.depthSource)
+        if (needsRestart && surfaceTexture != null && _status.value == CameraStatus.READY) {
+            if (prev.maxRes != next.maxRes) {
+                lensesBySide = null
+                lensPrefetch = null
+                info = null
+                live = null
+                _shaderParams.value = null
+            }
+            if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
         }
     }
 
@@ -825,6 +960,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onPause() {
         resumed = false
+        clearQueuedShutter()
+        ShotSaver.flushStreetPacing()
         cancelSelfTimer()
         stopRecording() // a recording never carries on in the background
         updateMotionSensors() // a recording still finishing keeps them until it is written
@@ -838,8 +975,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (activeCaptures == 0) stopCamera()
     }
 
+    private fun clearQueuedShutter() {
+        queuedShutterAt = 0L
+        _shutterQueued.value = false
+    }
+
     private fun stopCamera() {
         restartAfterCapture = false
+        clearQueuedShutter()
         startJob?.cancel()
         startJob = null
         controller.stop() // also ends a focus lock
@@ -859,6 +1002,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** The viewfinder's (new) camera texture; called whenever its GL context is created. */
     fun onSurfaceTexture(st: SurfaceTexture) {
+        StartupTrace.mark("surfaceCreated")
         viewModelScope.launch {
             surfaceTexture = st
             if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
@@ -871,34 +1015,56 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _status.value = CameraStatus.OPENING
         startJob = viewModelScope.launch {
             try {
-                val inf = info ?: run {
-                    val prefetch = lensPrefetch
-                    lensPrefetch = null
-                    val sides = lensesBySide ?: (prefetch?.let { runCatching { it.await() }.getOrNull() }
-                        ?: withContext(Dispatchers.Default) { discoverLenses(_settings.value.maxRes) }).also { lensesBySide = it }
-                    _frontAvailable.value = sides[true].orEmpty().isNotEmpty()
-                    if (sides[false].orEmpty().isEmpty()) throw java.io.IOException("No back camera with RAW support")
-                    // The saved side may have no RAW (or another phone): fall back to the back cameras.
-                    val front = _settings.value.front && _frontAvailable.value
-                    val all = sides.getValue(front)
-                    _lenses.value = all
-                    _maxResMp.value = sides.values.flatten().mapNotNull { it.maxResSize }
-                        .maxOfOrNull { Math.round(it.width.toLong() * it.height / 1e6f) } ?: 0
-                    if (front != _settings.value.front) change { it.copy(front = front) }
-                    (all.firstOrNull { it.label == _settings.value.lens } ?: all.first { it.label == "W" }).also { info = it }
+                val eff = current
+                val maxRes = eff.maxRes
+                var usedFastCache: FastLensEntry? = null
+                var inf = info
+                if (inf == null && lensesBySide == null) {
+                    val cached = FastLensCache.load(app, _settings.value.front, _settings.value.lens, maxRes)
+                        ?: FastLensCache.load(app, false, "W", maxRes)
+                    if (cached != null) {
+                        val hydrated = withContext(Dispatchers.Default) { controller.fastInfo(cached) }
+                        if (hydrated != null) {
+                            usedFastCache = cached
+                            inf = hydrated
+                            info = hydrated
+                            if (_lenses.value.isEmpty()) _lenses.value = listOf(hydrated)
+                        }
+                    }
                 }
-                _screenFlashCamera.value = inf.isFront && !inf.hasFlash
-                _flashAvailable.value = inf.hasFlash || _screenFlashCamera.value
-                _hiRes.value = inf.hiRes
-                _hardwareDepthAvailable.value = inf.hasHardwareDepth
-                _dualPixelAvailable.value = controller.dualPixelUsable(inf)
-                controller.setCaptureDepth(depthStream(current))
-                controller.setExposureBias(exposureBias(_settings.value))
+                if (inf == null) {
+                    inf = resolveLensFromDiscovery(maxRes)
+                }
+                publishLensCapabilities(inf)
+                controller.setCaptureDepth(depthStream(_settings.value))
+                controller.setExposureBias(exposureBias(eff))
+                controller.setRawViewfinder(rawViewfinderOn(_settings.value))
+                syncRawRing()
+                syncSnapFocus()
                 applyStabilization()
-                controller.start(inf, st)
+                val physicalFromLogical = try {
+                    controller.start(inf, st, knownPhysicalFromLogical = usedFastCache?.physicalFromLogical)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    if (usedFastCache == null) throw e
+                    // Cached camera IDs went stale: clear cache and fall back cleanly to full lens discovery.
+                    Log.w(TAG, "fast-start open failed; falling back to full lens discovery", e)
+                    FastLensCache.clear(app)
+                    usedFastCache = null
+                    info = null
+                    val discovered = resolveLensFromDiscovery(maxRes)
+                    inf = discovered
+                    publishLensCapabilities(discovered)
+                    controller.setCaptureDepth(depthStream(_settings.value))
+                    controller.start(discovered, st)
+                }
+                if (inf.physicalId != null) {
+                    FastLensCache.updatePhysicalStream(app, inf, maxRes, physicalFromLogical)
+                }
                 scaleFromStart = true
                 rawFrames.clear()
-                _frame.value = if (controller.rawStreams(inf)) ViewfinderRenderer.Frame(
+                _frame.value = if (controller.rawViewfinderStreams(inf)) ViewfinderRenderer.Frame(
                     // Prototype: the raw stream, binned 2x2 and cropped to the preview's aspect as the ISP's preview is.
                     bufferWidth = (inf.rawSize.width * inf.previewCropX / 2f).toInt().coerceAtLeast(1),
                     bufferHeight = (inf.rawSize.height * inf.previewCropY / 2f).toInt().coerceAtLeast(1),
@@ -923,14 +1089,92 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     mirror = inf.isFront,
                 )
                 _status.value = CameraStatus.READY
+                StartupTrace.mark("cameraReady", "${inf.label} cached=${usedFastCache != null}")
                 if (inf.label != _settings.value.lens) change { it.copy(lens = inf.label) }
+                // If the user pressed shutter / volume while the camera was opening, fire once the first frame arrives.
+                if (queuedShutterAt != 0L) {
+                    withTimeoutOrNull(EARLY_SHUTTER_FRAME_WAIT_MS) { controller.frames.first { it != null } }
+                    val age = SystemClock.uptimeMillis() - queuedShutterAt
+                    clearQueuedShutter()
+                    if (resumed && _status.value == CameraStatus.READY && age in 0..EARLY_SHUTTER_EXPIRY_MS) {
+                        StartupTrace.mark("shutterFiredFromQueue", "wait=${age}ms")
+                        shootNow()
+                    }
+                }
+                if (usedFastCache != null && lensesBySide == null) {
+                    refreshLensesInBackground(maxRes, inf)
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "camera start", e)
                 _message.value = tr("Camera: %s", e.message ?: e.javaClass.simpleName)
                 _status.value = CameraStatus.FAILED
+                clearQueuedShutter()
                 startJob = null
+            }
+        }
+    }
+
+    private suspend fun resolveLensFromDiscovery(maxRes: Boolean): CameraController.Info {
+        val prefetch = lensPrefetch
+        lensPrefetch = null
+        val sides = lensesBySide ?: (prefetch?.let { runCatching { it.await() }.getOrNull() }
+            ?: withContext(Dispatchers.Default) { discoverLenses(maxRes) }).also {
+            lensesBySide = it
+            FastLensCache.saveAll(app, it, maxRes)
+            StartupTrace.mark("lensDiscoveryDone", "sync")
+        }
+        _frontAvailable.value = sides[true].orEmpty().isNotEmpty()
+        if (sides[false].orEmpty().isEmpty()) throw java.io.IOException("No back camera with RAW support")
+        // The saved side may have no RAW (or another phone): fall back to the back cameras.
+        val front = _settings.value.front && _frontAvailable.value
+        val all = sides.getValue(front)
+        _lenses.value = all
+        _maxResMp.value = sides.values.flatten().mapNotNull { it.maxResSize }
+            .maxOfOrNull { Math.round(it.width.toLong() * it.height / 1e6f) } ?: 0
+        if (front != _settings.value.front) change { it.copy(front = front) }
+        return (all.firstOrNull { it.label == _settings.value.lens } ?: all.first { it.label == "W" }).also { info = it }
+    }
+
+    private fun publishLensCapabilities(inf: CameraController.Info) {
+        _screenFlashCamera.value = inf.isFront && !inf.hasFlash
+        _flashAvailable.value = inf.hasFlash || _screenFlashCamera.value
+        _hiRes.value = inf.hiRes
+        _hardwareDepthAvailable.value = inf.hasHardwareDepth
+        _dualPixelAvailable.value = controller.dualPixelUsable(inf)
+        _canSnapFocus.value = inf.canFocus
+        _focusCalibrated.value = inf.focusCalibrated
+    }
+
+    /**
+     * Runs full multi-camera discovery after a fast cached launch is already streaming, populating the other lens
+     * buttons, selfie toggle, max-res MP, depth capabilities, and refreshing [FastLensCache].
+     */
+    private fun refreshLensesInBackground(maxRes: Boolean, opened: CameraController.Info) {
+        if (backgroundLensJob?.isActive == true) return
+        backgroundLensJob = viewModelScope.launch(Dispatchers.Default) {
+            val sides = runCatching { discoverLenses(maxRes) }.getOrNull() ?: return@launch
+            FastLensCache.saveAll(app, sides, maxRes)
+            StartupTrace.mark("lensDiscoveryDone", "background")
+            withContext(Dispatchers.Main) {
+                if (current.maxRes != maxRes) return@withContext
+                lensesBySide = sides
+                _frontAvailable.value = sides[true].orEmpty().isNotEmpty()
+                val all = sides[opened.isFront].orEmpty()
+                if (all.isNotEmpty()) _lenses.value = all
+                _maxResMp.value = sides.values.flatten().mapNotNull { it.maxResSize }
+                    .maxOfOrNull { Math.round(it.width.toLong() * it.height / 1e6f) } ?: 0
+                val full = all.firstOrNull { it.name == opened.name }
+                if (full != null && info === opened) {
+                    info = full
+                    publishLensCapabilities(full)
+                    // If depth capture was enabled and the fast-open skipped the depth probe, attach it on next restart.
+                    if (depthStream(_settings.value) != null && (full.hasHardwareDepth || controller.dualPixelUsable(full))) {
+                        controller.setCaptureDepth(depthStream(_settings.value))
+                        if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+                    }
+                }
             }
         }
     }
@@ -1088,9 +1332,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun switchTo(lens: CameraController.Info) {
         info = lens
-        _hiRes.value = lens.hiRes
-        _hardwareDepthAvailable.value = lens.hasHardwareDepth
-        _dualPixelAvailable.value = controller.dualPixelUsable(lens)
+        publishLensCapabilities(lens)
         stopTracking(clearPoint = true) // the restart ends any focus lock
         _dragPoint.value = null
         // The live develop belongs to the old lens: start the new one fresh.
@@ -1214,6 +1456,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * [PreviewLevel.STILL_WHITE_BALANCED]. Main thread.
      */
     private fun meterRawIfUncalibrated() {
+        if (isStreetActive) return
         val lens = info ?: return
         val settings = _settings.value
         val key = settings.lensKey(lens.hiRes)
@@ -1473,7 +1716,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setEasy(on: Boolean) {
         if (_recordingMs.value != null || _longExposing.value) return
         val prev = current
-        change { it.copy(easy = on) }
+        if (on) _streetSession.value = false
+        change { it.copy(easy = on, street = if (on) false else it.street) }
         val next = current
         if (prev.activeSelfTimer > 0 && next.activeSelfTimer == 0) cancelSelfTimer()
         if (prev.trackFocus && !next.trackFocus && _tracking.value) _focusPoint.value?.let { (x, y) -> focusAt(x, y) }
@@ -1483,10 +1727,61 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             _tilt.value = null
         }
         if (prev.videoMotionData != next.videoMotionData) applyStabilization()
+        syncSnapFocus()
+        syncRawRing()
     }
 
     /** Easy mode's Colour / B&W switch ([CameraSettings.easyMono]). */
     fun setEasyMono(on: Boolean) = change { it.copy(easyMono = on) }
+
+    /** Persistent Street mode toggle in Settings (mutually exclusive with Easy mode). */
+    fun setStreet(on: Boolean) {
+        if (_recordingMs.value != null || _longExposing.value) return
+        val prev = current
+        val wasActive = isStreetActive
+        if (!on) _streetSession.value = false
+        change { it.copy(street = on, easy = if (on) false else it.easy) }
+        val nowActive = isStreetActive
+        if (wasActive != nowActive) applyStreetTransition(prev, current, nowActive)
+    }
+
+    /** Double-pressing the power button launches RawBoy Camera directly in Street mode. */
+    fun setStreetOnPowerLaunch(on: Boolean) = change { it.copy(streetOnPowerLaunch = on) }
+
+    /** Street mode's Colour / B&W switch (Easy-mode default film / mono stocks). */
+    fun setStreetMono(on: Boolean) {
+        change { it.copy(streetMono = on) }
+        preloadActiveLook()
+    }
+
+    /** Street mode's Snap Focus distance preset (AF, 1.5m, 2.5m, 5m, ∞). */
+    fun setStreetSnapFocus(focus: SnapFocus) {
+        change { it.copy(streetSnapFocus = focus) }
+        if (focus != SnapFocus.AF) {
+            stopTracking(clearPoint = true)
+            _dragPoint.value = null
+        }
+        syncSnapFocus()
+    }
+
+    /** Cycles through Street mode's Snap Focus presets (AF -> 1.5m -> 2.5m -> 5m -> ∞ -> AF). */
+    fun cycleStreetSnapFocus() = setStreetSnapFocus(_settings.value.streetSnapFocus.next())
+
+    /** Street mode's minimum shutter speed target. */
+    fun setStreetShutter(shutter: StreetShutter) = change { it.copy(streetShutter = shutter) }
+
+    /** Street mode: tapping anywhere on the viewfinder shoots immediately. */
+    fun setStreetTapToShoot(on: Boolean) = change { it.copy(streetTapToShoot = on) }
+
+    /** Street mode: lightweight 3-frame continuous RAW ring buffer for 0 ms shutter lag. */
+    fun setStreetZsl(on: Boolean) {
+        if (_recordingMs.value != null) return
+        change { it.copy(streetZsl = on) }
+        syncRawRing()
+        if (isStreetActive) {
+            if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+        }
+    }
 
     /** Raw viewfinder (prototype) on or off; the camera restarts so the stream and the viewfinder change together. */
     fun setRawViewfinder(on: Boolean) {
@@ -1538,11 +1833,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Resets all user-configurable settings to defaults while keeping learned camera calibration. */
     fun resetSettings() {
         val prev = _settings.value
+        val wasStreet = isStreetActive
         val recording = _recordingMs.value != null
+        _streetSession.value = false
         val next = prev.resetToDefaults().let {
             if (recording) it.copy(maxRes = prev.maxRes, front = prev.front, lens = prev.lens, flatVideo = prev.flatVideo, videoQuality = prev.videoQuality, videoMotionData = prev.videoMotionData) else it
         }
         change { next }
+        syncSnapFocus()
         if (!recording) {
             if (prev.maxRes != next.maxRes) {
                 lensesBySide = null
@@ -1587,7 +1885,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             controller.setCaptureDepth(depthStream(next))
             if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
         }
-        if ((prev.rawViewfinder != next.rawViewfinder || prev.zslBurst != next.zslBurst) && !recording) {
+        if ((prev.rawViewfinder != next.rawViewfinder || prev.zslBurst != next.zslBurst || wasStreet != isStreetActive || prev.streetZsl != next.streetZsl) && !recording) {
             controller.setRawViewfinder(rawViewfinderOn(next))
             syncRawRing()
             if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
@@ -1598,7 +1896,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val s = edit(_settings.value)
         _settings.value = s
         Strings.choose(s.language)
-        controller.setExposureBias(exposureBias(s.effective))
+        controller.setExposureBias(exposureBias(s.effectiveFor(isStreetActive)))
         syncRawRing()
         // A slider drag changes settings every frame: save once it rests.
         saveJob?.cancel()
@@ -1642,6 +1940,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * The shutter: with the self-timer (Experimental) set, it counts down first so the phone can settle on a tripod,
      * and a second press cancels the countdown; during a long exposure it ends the exposure early.
+     * Pressing shutter or volume while the camera is still [CameraStatus.OPENING] queues one shot to fire as soon as
+     * the session delivers its first frame.
      */
     fun shutter() {
         if (_longExposing.value) {
@@ -1655,6 +1955,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
         val seconds = current.activeSelfTimer
         if (seconds <= 0 || _videoMode.value) {
+            if (resumed && _status.value == CameraStatus.OPENING && !_videoMode.value) {
+                queuedShutterAt = SystemClock.uptimeMillis()
+                _shutterQueued.value = true
+                StartupTrace.mark("shutterQueued")
+                return
+            }
             shootNow()
             return
         }
@@ -1680,6 +1986,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             toggleRecording()
             return
         }
+        val shutterStartMs = SystemClock.elapsedRealtime()
+        val street = isStreetActive
         val settings = current
         val hiRes = info?.hiRes == true
         val flash = settings.flash.takeIf { info?.hasFlash == true } ?: FlashMode.OFF
@@ -1690,9 +1998,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val burstFrames = if (hiRes || screenFlash || longExposure != null) 1 else settings.burstFrames(lowLight.value)
         // A long exposure holds the shutter like a merging burst does (the stack and its DNG write).
         val burst = (burstFrames > 1 || longExposure != null) && flash == FlashMode.OFF
-        val preferRing = zslBurstOn(settings, lowLight.value) && burstFrames > 1 && flash == FlashMode.OFF && !screenFlash && !hiRes && longExposure == null
+        val preferRing = if (street) {
+            streetZslOn(_settings.value) && flash == FlashMode.OFF && !screenFlash && !hiRes && longExposure == null
+        } else {
+            zslBurstOn(settings, lowLight.value) && burstFrames > 1 && flash == FlashMode.OFF && !screenFlash && !hiRes && longExposure == null
+        }
+        val streetShutter = if (street) _settings.value.streetShutter else StreetShutter.AUTO
+        if (street) ShotSaver.noteStreetCapture()
         // Debug note for the saved files' ImageDescription (CameraController.captureDng adds the frames actually merged).
         val mergeNote = "mode=${settings.burstMode.name.lowercase()} lowLight=${if (lowLight.value) 1 else 0}" +
+            (if (street) " street=1" else "") +
             when {
                 burstFrames > 1 -> ""
                 settings.burstMode == BurstMode.OFF -> " reason=mode-off"
@@ -1743,8 +2058,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     delay(SCREEN_FLASH_SETTLE_MS)
                 }
                 val pureRawThumb = if (settings.pureRaw) live?.let { viewfinderThumbnail(it.base.base, it.auto.exposure) } else null
-                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, preferRing, screenFlash, mergeNote, longExposure)
-                    .copy(mayHaveFace = mayHaveFace, pureRawThumbnail = pureRawThumb)
+                val shot = capture(
+                    shotId, settings, hiRes, viewfinderKey, flash, burstFrames, preferRing, screenFlash,
+                    mergeNote, longExposure, streetMode = street, streetShutter = streetShutter, shutterStartMs = shutterStartMs,
+                ).copy(mayHaveFace = mayHaveFace, pureRawThumbnail = pureRawThumb)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
@@ -1770,7 +2087,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** As the request goes to the camera: the click (if on, or required here) and the UI's shutter feedback. */
-    private fun onShutter(screenFlash: Boolean = false, exposed: Deferred<Unit>? = null) {
+    private fun onShutter(screenFlash: Boolean = false, exposed: Deferred<Unit>? = null, shutterStartMs: Long = 0L) {
+        if (shutterStartMs > 0L) {
+            StartupTrace.markShutter("submitted", SystemClock.elapsedRealtime() - shutterStartMs)
+        }
         if (_settings.value.shutterSound || shutterSoundRequired) shutterSound.play()
         _shutterEvents.tryEmit(Unit)
         // The exposure runs right after the request goes out: keep the frame lit through it, then switch it off. Where
@@ -1785,7 +2105,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, preferRing: Boolean = false, screenFlash: Boolean = false, mergeNote: String = "", longExposure: app.rawboy.camera.capture.LongExposure? = null): Shot {
+    private suspend fun capture(
+        shotId: Long,
+        settings: CameraSettings,
+        hiRes: Boolean,
+        viewfinderKey: Float?,
+        flash: FlashMode,
+        burstFrames: Int,
+        preferRing: Boolean = false,
+        screenFlash: Boolean = false,
+        mergeNote: String = "",
+        longExposure: app.rawboy.camera.capture.LongExposure? = null,
+        streetMode: Boolean = false,
+        streetShutter: StreetShutter = StreetShutter.AUTO,
+        shutterStartMs: Long = 0L,
+    ): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -1809,7 +2143,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val result = try {
                     withContext(Dispatchers.IO) {
                         val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                        val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, preferRing, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
+                        val result = out.buffered(1 shl 20).use {
+                            controller.captureDng(
+                                orientation, it, flash, settings.flashGuide(hiRes), burstFrames, preferRing, fix,
+                                longExposure, mergeNote, streetMode = streetMode, streetShutter = streetShutter,
+                                onExposed = { exposed.complete(Unit); _longExposing.value = false },
+                            ) { onShutter(screenFlash, exposed, shutterStartMs) }
+                        }
                         fix?.let { addGps(uri, it) }
                         if (!dngPending) MediaStoreOutput.publish(resolver, uri)
                         result
@@ -1819,12 +2159,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     throw t
                 }
                 Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
+                if (shutterStartMs > 0L) StartupTrace.markShutter("dngReady", SystemClock.elapsedRealtime() - shutterStartMs, name)
                 Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE), dngPending = dngPending)
             } else {
                 val file = File(app.cacheDir, "$baseName-$shotId.dng")
                 val result = try {
                     withContext(Dispatchers.IO) {
-                        val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, preferRing, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
+                        val result = file.outputStream().buffered(1 shl 20).use {
+                            controller.captureDng(
+                                orientation, it, flash, settings.flashGuide(hiRes), burstFrames, preferRing, fix,
+                                longExposure, mergeNote, streetMode = streetMode, streetShutter = streetShutter,
+                                onExposed = { exposed.complete(Unit); _longExposing.value = false },
+                            ) { onShutter(screenFlash, exposed, shutterStartMs) }
+                        }
                         fix?.let { addGps(Uri.fromFile(file), it) }
                         result
                     }
@@ -1832,6 +2179,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     file.delete()
                     throw t
                 }
+                if (shutterStartMs > 0L) StartupTrace.markShutter("dngReady", SystemClock.elapsedRealtime() - shutterStartMs, "$baseName.dng")
                 Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE))
             }
         } finally {
@@ -1945,6 +2293,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         internal const val TILT_DEADBAND = 0.4f
         private const val DNG_MIME = "image/x-adobe-dng"
         private const val SAVE_DELAY_MS = 500L
+        /** How long a queued early shutter waits for the first AE frame after READY, and max age before expiring. */
+        private const val EARLY_SHUTTER_FRAME_WAIT_MS = 350L
+        private const val EARLY_SHUTTER_EXPIRY_MS = 1500L
 
         /** Screen flash: how long the frame is lit before the shot (screen at full brightness, AE caught up), and after the request. */
         private const val SCREEN_FLASH_SETTLE_MS = 450L

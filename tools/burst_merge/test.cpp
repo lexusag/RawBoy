@@ -272,9 +272,17 @@ int main() {
         const double flatOut = rmse(out, nullptr, 40, 40, 560, 380);
         std::printf("ring: flat rmse %.2f -> %.2f DN (x%.2f), %zu frames\n", flatRef, flatOut, flatRef / flatOut, moved.size());
         check(flatRef / flatOut > 1.8, "ring: drained merge lowers noise at least 1.8x");
-        // Pushing after drainTo works, and clear() empties the ring.
+        // Pushing after drainTo works, copyFrame reads without emptying the ring, and clear() empties the ring.
         ring.push(reinterpret_cast<const uint8_t*>(latestRef.data()), W * 2, 9999LL);
         check(ring.timestamps().size() == 1 && ring.timestamps()[0] == 9999LL, "ring: reusable after drainTo");
+        std::vector<uint16_t> copied(W * H, 0);
+        const int64_t copiedTs = ring.copyFrame(9999LL, reinterpret_cast<uint8_t*>(copied.data()), copied.size() * 2);
+        check(copiedTs == 9999LL && copied == latestRef, "ring: copyFrame copies matching frame identically");
+        check(ring.copyFrame(0, reinterpret_cast<uint8_t*>(copied.data()), copied.size() * 2) == 9999LL,
+              "ring: copyFrame(0) returns newest frame");
+        check(ring.copyFrame(1234LL, reinterpret_cast<uint8_t*>(copied.data()), copied.size() * 2) == 0,
+              "ring: copyFrame returns 0 on missing timestamp");
+        check(ring.timestamps().size() == 1, "ring: copyFrame leaves ring intact");
         ring.clear();
         check(ring.timestamps().empty(), "ring: empty after clear");
     }

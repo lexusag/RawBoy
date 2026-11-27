@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">RawBoy Camera</string>
+    <string name="street_shortcut_short">Street</string>
+    <string name="street_shortcut_long">RawBoy Street Camera</string>
+    <string name="street_tile_label">RawBoy Street</string>
 </resources>

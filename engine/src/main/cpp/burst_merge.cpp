@@ -649,6 +649,28 @@ std::vector<int64_t> RawRingBuffer::drainTo(BurstMerger& merger, const std::vect
     return moved;
 }
 
+int64_t RawRingBuffer::copyFrame(int64_t timestampNs, uint8_t* dst, size_t dstBytes) const {
+    const size_t needed = static_cast<size_t>(width_) * height_ * sizeof(uint16_t);
+    if (!dst || dstBytes < needed) return 0;
+    std::lock_guard<std::mutex> lock(mutex_);
+    const Slot* chosen = nullptr;
+    if (timestampNs != 0) {
+        for (const auto& s : slots_) {
+            if (s.valid && s.timestampNs == timestampNs) {
+                chosen = &s;
+                break;
+            }
+        }
+    } else {
+        for (const auto& s : slots_) {
+            if (s.valid && (!chosen || s.seq > chosen->seq)) chosen = &s;
+        }
+    }
+    if (!chosen || chosen->raw.size() * sizeof(uint16_t) != needed) return 0;
+    std::memcpy(dst, chosen->raw.data(), needed);
+    return chosen->timestampNs;
+}
+
 void RawRingBuffer::clear() {
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto& s : slots_) {

@@ -40,6 +40,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.capture.SnapFocus
+import app.rawboy.camera.capture.StreetExposure
+import app.rawboy.camera.capture.StreetShutter
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
 import app.rawboy.export.FilmFrameColor
@@ -223,12 +226,23 @@ fun CameraScreen(
     val recordingMs by vm.recordingMs.collectAsStateWithLifecycle()
     val videoSink by vm.videoSink.collectAsStateWithLifecycle()
     val recordableViewfinder by vm.recordableViewfinder.collectAsStateWithLifecycle()
-    // Easy mode: the point-and-shoot screen. `shown` is what takes part (no grid, level, histogram... while it's on).
-    val easy = settings.easy
-    val shown = settings.effective
+    val street by vm.streetActive.collectAsStateWithLifecycle()
+    val canSnapFocus by vm.canSnapFocus.collectAsStateWithLifecycle()
+    val focusCalibrated by vm.focusCalibrated.collectAsStateWithLifecycle()
+    val shutterQueued by vm.shutterQueued.collectAsStateWithLifecycle()
+    // Street mode takes precedence over Easy mode when active (e.g. double-press power launch).
+    val easy = !street && settings.easy
+    val shown = settings.effectiveFor(street)
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
+    // Compact exposure readout in Street mode (rounded shutter + ISO to avoid high-frequency recomposition).
+    val streetExposureText by remember(vm, street) {
+        vm.controller.frames.map { f ->
+            if (!street || f == null || f.exposureNs <= 0L || f.iso <= 0f) ""
+            else "${StreetExposure.formatShutter(f.exposureNs)} · ISO ${((f.iso / 10f).roundToInt() * 10).coerceAtLeast(10)}"
+        }.distinctUntilChanged()
+    }.collectAsStateWithLifecycle("")
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -291,7 +305,10 @@ fun CameraScreen(
             else -> ""
         }
         val barButtons = @Composable {
-            if (easy) {
+            if (street) {
+                StreetModePill(onClick = vm::exitStreetMode)
+                RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
+            } else if (easy) {
                 // RAW, Frames, the flash and the way back to Settings (where Easy mode is switched off).
                 if (!videoMode) {
                     RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
@@ -305,7 +322,7 @@ fun CameraScreen(
                 BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
                 if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
             }
-            if (!easy) HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
+            if (!easy && !street) HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
             IconButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = tr("Settings"))
             }
@@ -341,10 +358,11 @@ fun CameraScreen(
         val modeSwitchEnabled = recordingMs == null && !longExposing && selfTimerLeft == null
         val shutterButton = @Composable {
             Shutter(
-                enabled = selfTimerLeft != null || (status == CameraStatus.READY && (!merging || longExposing)),
+                enabled = selfTimerLeft != null || (status == CameraStatus.OPENING && !videoMode) || (status == CameraStatus.READY && (!merging || longExposing)),
                 video = videoMode,
-                size = if (easy) EASY_SHUTTER_SIZE else 76.dp,
+                size = if (easy || street) EASY_SHUTTER_SIZE else 76.dp,
                 stopLabel = stopLabel,
+                queued = shutterQueued,
                 onClick = vm::shutter,
                 modifier = Modifier.graphicsLayer {
                     scaleX = shutterScale.value
@@ -396,7 +414,7 @@ fun CameraScreen(
         }
         CameraLayout(
             landscape = landscape,
-            controlsWidth = if (easy) EASY_LANDSCAPE_CONTROLS_WIDTH else LANDSCAPE_CONTROLS_WIDTH,
+            controlsWidth = if (easy || street) EASY_LANDSCAPE_CONTROLS_WIDTH else LANDSCAPE_CONTROLS_WIDTH,
             bar = {
                 if (landscape) {
                     Column(
@@ -446,7 +464,7 @@ fun CameraScreen(
                 ) {
                     Viewfinder(
                         f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe,
-                        onLuma = if (settings.scanQr && recordingMs == null) vm::onViewfinderLuma else null,
+                        onLuma = if (shown.scanQr && recordingMs == null) vm::onViewfinderLuma else null,
                         // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
                         onTrackLuma = if (shown.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                         turns = turns,
@@ -454,6 +472,7 @@ fun CameraScreen(
                         rawFrames = vm.rawFrames,
                         videoSink = videoSink,
                         videoMode = videoMode,
+                        fastMono = shown.monoMode,
                         eglConfig = if (recordableViewfinder) ViewfinderEglConfig.RECORDABLE_RGBA8888 else null,
                     )
                     // The self-timer's countdown, big and upright over the picture.
@@ -481,6 +500,8 @@ fun CameraScreen(
                             .turned(turns)
                             .onSizeChanged { viewSize = it },
                     ) {
+                        val tapToShoot = street && settings.streetTapToShoot
+                        val simpleTouch = easy || street
                         Box(
                             Modifier
                                 .matchParentSize()
@@ -498,15 +519,17 @@ fun CameraScreen(
                                         } while (event.changes.any { it.pressed })
                                     }
                                 }
-                                .pointerInput(easy) {
+                                .pointerInput(simpleTouch, tapToShoot) {
                                     detectTapGestures(
-                                        // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
-                                        onTap = { vm.focusAt(it.x / size.width, it.y / size.height) },
+                                        // Tap: immediate shutter in Street tap-to-shoot, else focus lock at that point.
+                                        onTap = {
+                                            if (tapToShoot) vm.shutter() else vm.focusAt(it.x / size.width, it.y / size.height)
+                                        },
                                         onLongPress = {}, // a hold compares (onPress); it mustn't also focus on release
                                         onPress = {
-                                            // Easy mode: a hold does nothing special (a finger resting on the picture
+                                            // Easy & Street mode: a hold does nothing special (a finger resting on the picture
                                             // mustn't change what it shows).
-                                            if (!easy) {
+                                            if (!simpleTouch) {
                                                 // Press and hold: the auto develop without the look.
                                                 val hold = scope.launch {
                                                     delay(COMPARE_DELAY_MS)
@@ -521,13 +544,13 @@ fun CameraScreen(
                                 },
                         )
                         // Over the tap area, under the lens selector and the AF LOCK badge.
-                        if (!easy) shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
+                        if (!easy && !street) shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
                     }
                     when (status) {
                         CameraStatus.NEEDS_PERMISSION -> Button(onClick = requestPermission) { Text(tr("Allow camera")) }
                         CameraStatus.OPENING -> CircularProgressIndicator()
                         CameraStatus.FAILED -> Text(tr("Camera unavailable"), color = MaterialTheme.colorScheme.error)
-                        CameraStatus.READY -> if (params == null) CircularProgressIndicator()
+                        CameraStatus.READY -> Unit // live passthrough draws on frame 0 before params arrives
                     }
                     // Landscape has them beside the S/B/W buttons, under the thumb.
                     if (lenses.size > 1 && !landscape) {
@@ -538,6 +561,20 @@ fun CameraScreen(
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
                                 .padding(bottom = 16.dp),
+                        )
+                    }
+                    // Subtle live exposure readout in Street mode so the shooter sees shutter speed at a glance.
+                    if (street && streetExposureText.isNotEmpty()) {
+                        Text(
+                            streetExposureText,
+                            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                            color = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier
+                                .align(Alignment.BottomStart)
+                                .padding(start = 10.dp, bottom = 10.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0x88000000))
+                                .padding(horizontal = 7.dp, vertical = 3.dp),
                         )
                     }
                     // A narrow column in the bottom right corner, beside the lens selector.
@@ -633,7 +670,52 @@ fun CameraScreen(
                 }
             },
             controls = {
-                if (easy) {
+                if (street) {
+                    // Street mode: Easy-mode Colour / B&W stocks plus quick Snap Focus selector (when the lens can focus).
+                    val tone = @Composable { vertical: Boolean ->
+                        TwoWaySwitch(tr("COLOUR"), tr("B&W"), settings.streetMono, enabled = true, vertical = vertical, onSelect = vm::setStreetMono)
+                    }
+                    if (landscape) {
+                        Column(
+                            Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.SpaceEvenly,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            if (lenses.size > 1) {
+                                LensSelector(
+                                    labels = lenses.map { it.label },
+                                    selected = settings.lens,
+                                    onSelect = vm::selectLens,
+                                    modifier = Modifier,
+                                    vertical = true,
+                                )
+                            }
+                            if (canSnapFocus) {
+                                SnapFocusChip(
+                                    selected = settings.streetSnapFocus,
+                                    calibrated = focusCalibrated,
+                                    onClick = vm::cycleStreetSnapFocus,
+                                )
+                            }
+                            tone(true)
+                        }
+                    } else {
+                        Column(
+                            Modifier.fillMaxWidth().padding(top = 8.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            if (canSnapFocus) {
+                                SnapFocusBar(
+                                    selected = settings.streetSnapFocus,
+                                    calibrated = focusCalibrated,
+                                    onSelect = vm::setStreetSnapFocus,
+                                )
+                            }
+                            tone(false)
+                        }
+                    }
+                } else if (easy) {
                     // No look menu or sliders: Colour (the default film stock) or B&W (Film + B&W, the default mono
                     // stock). Landscape: in a column with the lenses beside the shutter (portrait has them over the
                     // viewfinder).
@@ -720,7 +802,7 @@ fun CameraScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         extras()
-                        ModeSwitch(videoMode, enabled = modeSwitchEnabled, vertical = true) { vm.setVideoMode(it) }
+                        if (!street) ModeSwitch(videoMode, enabled = modeSwitchEnabled, vertical = true) { vm.setVideoMode(it) }
                         switchButton()
                         shutterButton()
                         lastPhoto()
@@ -728,8 +810,8 @@ fun CameraScreen(
                 } else {
                     // Swiping sideways anywhere on the shutter area switches too: left for video, right back to photo.
                     Column(
-                        Modifier.pointerInput(modeSwitchEnabled) {
-                            if (!modeSwitchEnabled) return@pointerInput
+                        Modifier.pointerInput(modeSwitchEnabled, street) {
+                            if (!modeSwitchEnabled || street) return@pointerInput
                             var drag = 0f
                             detectHorizontalDragGestures(
                                 onDragStart = { drag = 0f },
@@ -741,24 +823,26 @@ fun CameraScreen(
                         },
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                                if (!videoMode && shown.experimental) TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
-                            }
-                            ModeSwitch(videoMode, enabled = modeSwitchEnabled) { vm.setVideoMode(it) }
-                            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                                if (!videoMode && shown.experimental) {
-                                    LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
+                        if (!street) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                                    if (!videoMode && shown.experimental) TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
+                                }
+                                ModeSwitch(videoMode, enabled = modeSwitchEnabled) { vm.setVideoMode(it) }
+                                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                    if (!videoMode && shown.experimental) {
+                                        LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
+                                    }
                                 }
                             }
                         }
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = if (easy) 16.dp else 8.dp),
+                                .padding(horizontal = 24.dp, vertical = if (easy || street) 14.dp else 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             lastPhoto()
@@ -1073,10 +1157,11 @@ private fun Shutter(
     modifier: Modifier = Modifier,
     video: Boolean = false,
     stopLabel: String? = null,
+    queued: Boolean = false,
     size: Dp = 76.dp,
 ) {
     val stopping = stopLabel != null
-    val ring = if (enabled) Color.White else Color.Gray
+    val ring = if (queued) MaterialTheme.colorScheme.primary else if (enabled) Color.White else Color.Gray
     // Video: a red dot; while recording, shooting a long exposure, or counting down a timer, a stop square.
     val fill = if (!video) ring else if (enabled) Color(0xFFE53935) else Color.Gray
     val shape = if (stopping) RoundedCornerShape(8.dp) else CircleShape
@@ -1094,6 +1179,82 @@ private fun Shutter(
                 onClick = onClick,
             )
             .semantics { contentDescription = stopLabel ?: if (video) tr("Record") else tr("Shutter") },
+    )
+}
+
+/** Amber Street mode badge in the top bar; tapping exits Street mode into the full camera. */
+@Composable
+private fun StreetModePill(onClick: () -> Unit) {
+    Text(
+        tr("STREET"),
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
+        color = Color.Black,
+        modifier = Modifier
+            .padding(horizontal = 4.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.primary)
+            .clickable(
+                onClickLabel = tr("Switch to full camera"),
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+    )
+}
+
+/** Horizontal Snap Focus zone selector for portrait Street mode (`AF · 1.5m · 2.5m · 5m · ∞`). */
+@Composable
+private fun SnapFocusBar(
+    selected: SnapFocus,
+    calibrated: Boolean,
+    onSelect: (SnapFocus) -> Unit,
+) {
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color(0xFF262628))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (preset in SnapFocus.entries) {
+            val active = preset == selected
+            Text(
+                tr(preset.displayLabel(calibrated)),
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = if (active) FontWeight.Bold else FontWeight.Medium),
+                color = if (active) Color.Black else Color.White.copy(alpha = 0.8f),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(15.dp))
+                    .background(if (active) MaterialTheme.colorScheme.primary else Color.Transparent)
+                    .clickable(enabled = !active) { onSelect(preset) }
+                    .semantics { stateDescription = if (active) tr("Selected") else tr("Not selected") }
+                    .padding(horizontal = 11.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
+/** Compact tap-to-cycle Snap Focus chip for landscape Street mode. */
+@Composable
+private fun SnapFocusChip(
+    selected: SnapFocus,
+    calibrated: Boolean,
+    onClick: () -> Unit,
+) {
+    val fixed = selected != SnapFocus.AF
+    Text(
+        tr(selected.displayLabel(calibrated)),
+        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+        color = if (fixed) Color.Black else Color.White,
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(if (fixed) MaterialTheme.colorScheme.primary else Color(0xFF2A2A2A))
+            .clickable(
+                onClickLabel = tr("Snap focus"),
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     )
 }
 
@@ -1286,6 +1447,8 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
     val maxResMp by vm.maxResMp.collectAsState()
     val hardwareDepth by vm.hardwareDepthAvailable.collectAsState()
     val dualPixel by vm.dualPixelAvailable.collectAsState()
+    val street by vm.streetActive.collectAsState()
+    val focusCalibrated by vm.focusCalibrated.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
         FramesSettingsContent(settings, vm, onBack = { showFrames = false })
@@ -1316,8 +1479,75 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             onSelect = vm::setLanguage,
         )
 
+        SettingsSection("Street mode")
+        SettingSwitch(
+            title = "Street mode",
+            subtitle = "Instant pocket camera: Colour or B&W, Snap Focus, single-frame ZSL",
+            checked = street,
+            enabled = !recording,
+            onChange = { if (it) vm.setStreet(true) else vm.exitStreetMode() },
+        )
+        SettingSwitch(
+            title = "Power double-press opens Street",
+            subtitle = "Double-pressing the power button launches straight into Street mode",
+            checked = settings.streetOnPowerLaunch,
+            onChange = vm::setStreetOnPowerLaunch,
+        )
+
+        if (street) {
+            SettingChoice(
+                title = "Snap focus",
+                subtitle = if (focusCalibrated) {
+                    "Fixed zone focus distance for 0 ms focus lag; AF uses continuous autofocus"
+                } else {
+                    "Approximate zone focus (this lens is uncalibrated); AF uses continuous autofocus"
+                },
+                options = SnapFocus.entries,
+                selected = settings.streetSnapFocus,
+                label = { tr(it.displayLabel(focusCalibrated)) },
+                onSelect = vm::setStreetSnapFocus,
+            )
+            SettingChoice(
+                title = "Min shutter speed",
+                subtitle = "Freezes moving street subjects by raising ISO when light drops",
+                options = StreetShutter.entries,
+                selected = settings.streetShutter,
+                label = { tr(it.label) },
+                onSelect = vm::setStreetShutter,
+            )
+            SettingSwitch(
+                title = "Tap viewfinder to shoot",
+                subtitle = "Tap anywhere on the frame to shoot; off taps to focus",
+                checked = settings.streetTapToShoot,
+                onChange = vm::setStreetTapToShoot,
+            )
+            if (vm.rawViewfinderAvailable) {
+                SettingSwitch(
+                    title = "Instant capture (ZSL)",
+                    subtitle = "Zero-shutter-lag 3-frame RAW buffer (~65 MB RAM)",
+                    checked = settings.streetZsl,
+                    enabled = !recording,
+                    onChange = vm::setStreetZsl,
+                )
+            }
+            SettingsSection("Capture")
+            ShutterSoundSetting(settings, vm)
+            GeotagSetting(settings, vm, requestLocation)
+            SettingSwitch(
+                title = "Grid",
+                subtitle = "3 × 3 lines over the viewfinder",
+                checked = settings.showGrid,
+                onChange = vm::setShowGrid,
+            )
+            SettingSwitch(
+                title = "Level",
+                subtitle = "Horizon line over the viewfinder",
+                checked = settings.showLevel,
+                onChange = vm::setShowLevel,
+            )
+        } else {
         SettingsSection("Easy mode")
-        // First under Language, so whoever set the phone up finds the way back to the full camera at once.
+        // First under Language/Street, so whoever set the phone up finds the way back to the full camera at once.
         SettingSwitch(
             title = "Easy mode",
             subtitle = "Big shutter and only the basics; the other settings wait",
@@ -1689,6 +1919,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             }
 
             PlatformInfo(vm, shareDeviceReport, shareTuningData)
+        }
         }
 
         Spacer(Modifier.height(16.dp))
