@@ -1,3 +1,8 @@
+**Camera: plain frame icon for the Frames toggle (iOS, 2026-11-26)**
+
+- Replaced the top-bar **Frames** toggle icon from SF Symbol `photo.artframe` (a frame with a landscape picture inside) to `rectangle.inset.filled` (a plain frame with a solid inset rectangle, matching Android's `FrameIcon`).
+- Code: `ios/Camera/ui/CameraScreen.swift`, `app-camera/src/main/java/app/rawboy/camera/ui/CameraScreen.kt` (comment).
+
 **Camera: Fast Street Photo Mode and instant startup pipeline (Android, 2026-11-26)**
 
 - **Universal fast-start pipeline (all modes):** `FastLensCache` persists the active lens descriptor keyed by `Build.FINGERPRINT` so startup opens the camera immediately without waiting ~1.7 s for full multi-camera discovery (other lenses, selfie and depth populate asynchronously after `READY`); `CameraActivity.onCreate` preopens the camera device and preloads the active film stock / LUT before Compose and EGL finish; `GlProgramCache` persists linked GLES 3.0 binaries (`glProgramBinary`) and lazily compiles optional shaders while `FastPreviewProgram` draws frame 0 live before first-frame analysis completes; pressing shutter or volume during `OPENING` queues one shot to fire as soon as the first frame arrives; single-frame 16-bit RAW captures copy pixels off `captureLock` before the ~24 MB DNG write; `baseline-prof.txt` pre-compiles startup classes; `StartupTrace` logs launch and shutter milestones under `RawBoyStartup`.
