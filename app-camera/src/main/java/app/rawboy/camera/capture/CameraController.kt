@@ -955,15 +955,16 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         inf.characteristics.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_OIS_DATA_MODES)
             ?.contains(CameraMetadata.STATISTICS_OIS_DATA_MODE_ON) == true
 
-    /** Exposure lock (AE lock) is on: the camera holds the exposure it has, separately from the focus lock. */
+    /** Exposure and white balance lock (AE/WB lock) is on: the camera holds its exposure and white balance, separately from the focus lock. */
     @Volatile
     private var exposureLocked = false
 
-    /** Holds ([locked]) or releases the camera's auto exposure; the focus lock is untouched. */
+    /** Holds ([locked]) or releases the camera's auto exposure and auto white balance; the focus lock is untouched. */
     fun setExposureLock(locked: Boolean) {
         handler.post {
             if (exposureLocked == locked) return@post
             exposureLocked = locked
+            clearRawRingOnHandler()
             runCatching { repeatPreview() }
         }
     }
@@ -1685,6 +1686,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 setForLens(CaptureRequest.SENSOR_SENSITIVITY, manual.second)
                 setForLens(CaptureRequest.SENSOR_FRAME_DURATION, max(manual.first, FlashExposure.FRAME_NS))
                 setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
+            } else {
+                set(CaptureRequest.CONTROL_AE_LOCK, false)
             }
             set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_SINGLE)
         }
@@ -2379,6 +2382,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         flashBiasEv = platform.flash.cameraAeCompensationEv
         var metering = false
         triggerAndWait(s, inf, "flash metering (compensation ${compensationEv()} EV)", FLASH_METERING_TIMEOUT_MS, {
+            set(CaptureRequest.CONTROL_AE_LOCK, false)
             set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START)
         }) { r ->
             val ae = r.get(CaptureResult.CONTROL_AE_STATE)
@@ -2551,6 +2555,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         focusPoint = null
         tracking = false
         focusWatch = null
+        exposureLocked = false
         _focusSize.value = FOCUS_SIZE
         device?.close()
         device = null
@@ -2632,6 +2637,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         // viewfinder showed a tighter frame than the photo. Always OFF; video mode's option is the lens's OIS only.
         set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
         set(CaptureRequest.CONTROL_AE_LOCK, exposureLocked)
+        set(CaptureRequest.CONTROL_AWB_LOCK, exposureLocked)
         // The Pixel's preview template already has OIS on, so video mode with the switch off must say OFF
         // explicitly (it was left alone and the switch changed nothing). Photos (null) leave the template's.
         stabilizeVideo?.let { switch ->

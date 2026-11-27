@@ -1,0 +1,5 @@
+**Camera: add white balance lock to exposure lock (AE/WB LOCK) in photo and video modes (Android, iOS, 2026-11-27)**
+
+- Exposure lock now also locks white balance (**AE/WB LOCK**) and is available in both photo mode and video mode (hidden in Android's Easy and Street modes), independent of tap-to-focus (**AF LOCK**).
+- Locks both camera hardware exposure and white balance (Android Camera2 `CONTROL_AE_LOCK` + `CONTROL_AWB_LOCK`; iOS AVFoundation `exposureMode` + `whiteBalanceMode` `.locked`) and holds the live and saved-photo auto-develop exposure so recomposing does not re-meter or shift brightness. Releases on tap, lens switch, camera pause, or entering Easy/Street mode.
+- Code: `app-camera/.../capture/CameraController.kt`, `CameraViewModel.kt`, `LiveExposure.kt`, `ShotDevelop.kt`, `ShotSaver.kt`, `ui/CameraScreen.kt`, `ui/Help.kt`, `i18n/StringsUk.kt`; `ios/Camera/capture/CameraController.swift`, `CameraViewModel.swift`, `ui/CameraScreen.swift`, `ui/Help.swift`; `docs/camera.md`, `docs/features-camera.md`. Tests: `LiveExposureTest`, `ShotDevelopParityTest`, `StringsTest`.

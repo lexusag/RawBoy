@@ -1,5 +1,7 @@
 package app.rawboy.camera
 
+import app.rawboy.auto.analysis.SceneLight
+import app.rawboy.auto.analysis.SceneRecognition
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.camera.platform.CameraPlatform
 import app.rawboy.camera.platform.NoiseProfile
@@ -13,6 +15,24 @@ import kotlin.math.roundToInt
  * on the JVM.
  */
 internal object ShotDevelop {
+    /**
+     * Final auto base develop before applying the look:
+     * - manual flash shots keep [base] as metered by AutoTone,
+     * - AE/WB-locked shots hold [lockedExposureEv] (no post-lock re-metering or scene lift),
+     * - normal phone-AE shots apply [SceneRecognition].
+     */
+    fun autoBase(
+        base: DevelopParams,
+        stats: SceneStats,
+        light: SceneLight,
+        isFlash: Boolean,
+        lockedExposureEv: Float?,
+    ): DevelopParams = when {
+        isFlash -> base
+        lockedExposureEv != null -> base.copy(exposure = lockedExposureEv)
+        else -> SceneRecognition.apply(base, stats, light)
+    }
+
     /**
      * ISO multiplier for picking the shot's denoise from the ISO table: the phone's sensor noise ([NoiseProfile]),
      * divided by the frames a merged burst is worth (as clean as one frame at 1/frames the ISO).

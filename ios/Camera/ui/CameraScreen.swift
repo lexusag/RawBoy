@@ -291,23 +291,21 @@ struct CameraScreen: View {
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 8)
                 }
-                if vm.videoMode {
-                    Button { vm.setExposureLock(!vm.exposureLocked) } label: {
-                        Text(vm.exposureLocked ? "AE LOCK  ✕" : "AE LOCK")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(vm.exposureLocked ? Color.black : .white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Capsule().fill(vm.exposureLocked ? Color(red: 1, green: 0.84, blue: 0.31) : Color.black.opacity(0.4)))
-                            .frame(minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                    .padding(.leading, 12)
-                    .padding(.bottom, vm.lenses.count > 1 ? 56 : 8)
-                    .accessibilityLabel(vm.exposureLocked ? "Unlock exposure" : "Lock exposure")
+                Button { vm.setExposureLock(!vm.exposureLocked) } label: {
+                    Text(vm.exposureLocked ? "AE/WB LOCK  ✕" : "AE/WB LOCK")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(vm.exposureLocked ? Color.black : .white)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(Capsule().fill(vm.exposureLocked ? Color(red: 1, green: 0.84, blue: 0.31) : Color.black.opacity(0.4)))
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(.leading, 12)
+                .padding(.bottom, vm.lenses.count > 1 ? 56 : 8)
+                .accessibilityLabel(vm.exposureLocked ? "Unlock exposure and white balance" : "Lock exposure and white balance")
                 if vm.compare {
                     OverlayLabel("Without look").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }

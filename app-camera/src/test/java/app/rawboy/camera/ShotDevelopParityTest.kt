@@ -146,4 +146,28 @@ class ShotDevelopParityTest {
         }
         assertEquals(75f, former(7f, 150f))
     }
+
+    @Test
+    fun autoBaseHoldsLockedExposureAndSkipsSceneLift() {
+        val skyStats = app.rawboy.auto.analysis.SceneStats(
+            0.06f, -8f, -7f, -5f, -1.2f, -0.7f, 0f, 0.1f, 0.25f, 0f, 0f, 0f, 50f, IntArray(1), 0.25f,
+        )
+        val sunnyLight = app.rawboy.auto.analysis.SceneLight(exposureSeconds = 1f / 1000f)
+        val base = DevelopParams(exposure = 1.4f, contrast = 15f, highlights = -10f, shadows = 20f)
+
+        // Unlocked non-flash photo gets SceneRecognition lift (+0.45 EV).
+        val unlocked = ShotDevelop.autoBase(base, skyStats, sunnyLight, isFlash = false, lockedExposureEv = null)
+        assertEquals(1.85f, unlocked.exposure, 1e-5f)
+
+        // AE/WB-locked photo holds the locked exposure without re-metering or scene lift, keeping tone adjustments.
+        val locked = ShotDevelop.autoBase(base, skyStats, sunnyLight, isFlash = false, lockedExposureEv = -0.35f)
+        assertEquals(-0.35f, locked.exposure, 1e-5f)
+        assertEquals(base.contrast, locked.contrast, 1e-5f)
+        assertEquals(base.highlights, locked.highlights, 1e-5f)
+        assertEquals(base.shadows, locked.shadows, 1e-5f)
+
+        // Manual flash photo keeps AutoTone's own exposure even if a locked value were present.
+        val flash = ShotDevelop.autoBase(base, skyStats, sunnyLight, isFlash = true, lockedExposureEv = -0.35f)
+        assertEquals(base, flash)
+    }
 }

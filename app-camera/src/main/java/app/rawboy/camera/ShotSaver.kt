@@ -34,7 +34,6 @@ import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.NoiseLevel
 import app.rawboy.auto.analysis.SceneLight
-import app.rawboy.auto.analysis.SceneRecognition
 import app.rawboy.develop.FilmLeaks
 import app.rawboy.develop.Masks
 import app.rawboy.export.DateStamp
@@ -137,6 +136,8 @@ internal data class Shot(
     val dngPending: Boolean = false,
     /** Tiny viewfinder thumbnail used to update [_lastShot] immediately in Pure RAW mode without decoding the DNG. */
     val pureRawThumbnail: Bitmap? = null,
+    /** Auto-develop exposure (EV) held while AE/WB lock is active; null when unlocked (normal auto metering). */
+    val lockedExposureEv: Float? = null,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -551,7 +552,7 @@ internal object ShotSaver {
             val exposureSeconds = if (shot.exposureNs > 0L) shot.exposureNs / 1e9f
             else img.shotInfo.exposureTime.takeIf { it.isFinite() && it > 0.0 }?.toFloat() ?: 0f
             val sceneLight = SceneLight(exposureSeconds, shot.postRawBoost, shot.compensationEv)
-            val autoBase = if (shot.flashGuide == null) SceneRecognition.apply(a.autoBase, a.stats, sceneLight) else a.autoBase
+            val autoBase = ShotDevelop.autoBase(a.autoBase, a.stats, sceneLight, shot.flashGuide != null, shot.lockedExposureEv)
             val looked = ShotDevelop.looked(s, autoBase, a.stats.hasFace, shot.platform)
             // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))

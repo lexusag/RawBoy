@@ -619,10 +619,10 @@ fun CameraScreen(
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                             )
                         }
-                        if (videoMode) {
+                        if (!easy && !street) {
                             val aeLocked by vm.exposureLocked.collectAsStateWithLifecycle()
                             Text(
-                                if (aeLocked) tr("AE LOCK  ✕") else tr("AE LOCK"),
+                                if (aeLocked) tr("AE/WB LOCK  ✕") else tr("AE/WB LOCK"),
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                                 color = if (aeLocked) Color.Black else Color.White,
                                 modifier = Modifier

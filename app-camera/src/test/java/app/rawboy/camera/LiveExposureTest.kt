@@ -80,6 +80,28 @@ class LiveExposureTest {
         shown.drop(1).forEach { assertEquals(3f, it, 0.05f) }
     }
 
+    @Test
+    fun lockedExposureHoldsAcrossSceneChanges() {
+        // Locked on a bright scene (auto exposure 0.0 EV), then panned to a much darker scene (+2.0 EV)
+        // and a sunny blue-sky scene (+0.45 EV): locked exposure stays fixed without lifting or easing.
+        val lockedEv = 0.25f
+        val darkAuto = AutoTone.exposure(stats(0.015f), phoneAe = true)
+        assertTrue("dark scene would otherwise lift: $darkAuto", darkAuto > 1.5f)
+        assertEquals(lockedEv, LiveExposure.resolve(lockedEv, lockedEv, 0f, darkAuto, 0f, 0.3f), 1e-6f)
+        assertEquals(lockedEv, LiveExposure.resolve(lockedEv, lockedEv, 0f, darkAuto, 0f, 0.05f), 1e-6f)
+
+        val skyStats = stats(0.06f, p98 = -1.2f, blueSky = 0.25f)
+        val skyAuto = SceneRecognition.apply(
+            AutoTone.develop(skyStats, DevelopParams(), phoneAe = true),
+            skyStats,
+            SceneLight(exposureSeconds = 1f / 1000f),
+        )
+        assertEquals(lockedEv, LiveExposure.resolve(lockedEv, lockedEv, 0f, skyAuto.exposure, 0f, 0.3f), 1e-6f)
+
+        // Unlocking resumes normal easing from the held value.
+        assertEquals(lockedEv + 0.3f, LiveExposure.resolve(null, lockedEv, 0f, darkAuto, 0f, 0.3f), 1e-6f)
+    }
+
     /** A scene of key [key] with nothing else that moves the exposure (no face, highlights far below clip). */
     private fun stats(key: Float, p98: Float = -3f, blueSky: Float = 0f) =
         SceneStats(key, -8f, -7f, -5f, p98, p98 + 0.5f, 0f, 0.1f, blueSky, 0f, 0f, 0f, 50f, IntArray(1), blueSky)
