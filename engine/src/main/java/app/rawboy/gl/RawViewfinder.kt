@@ -69,6 +69,14 @@ class RawPreviewFrames(private val poolSize: Int = 3) {
     @Volatile
     var onFrame: (() -> Unit)? = null
 
+    /** While true, incoming frames are ignored without copying and any waiting frame is recycled. */
+    @Volatile
+    var paused: Boolean = false
+        set(value) {
+            field = value
+            if (value) clear()
+        }
+
     @Volatile
     var copied = 0L
         private set
@@ -97,6 +105,7 @@ class RawPreviewFrames(private val poolSize: Int = 3) {
         shadingRows: Int,
         timestampNs: Long,
     ) {
+        if (paused) return
         val bytes = rowStride * height
         if (bytes != capacity) {
             // A new size (another lens): a new pool. Frames still out are dropped when they come back.

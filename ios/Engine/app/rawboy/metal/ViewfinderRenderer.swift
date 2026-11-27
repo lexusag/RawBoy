@@ -86,10 +86,12 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     private let turnPipeline: MTLRenderPipelineState
     private let mipSampler: MTLSamplerState
 
+    private weak var attachedView: MTKView?
     private var pendingBuffer: CVPixelBuffer?
     private var pendingTime = CMTime.invalid
     private var videoSinkValue: VideoSink?
     private var animateGrainValue = false
+    private var pausedValue = false
     /** Camera frames drawn so far: the video's grain moves with it. */
     private var frameIndex: UInt32 = 0
     private var frameValue: Frame?
@@ -134,7 +136,42 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
      */
     public var videoSink: VideoSink? {
         get { lock.withLock { videoSinkValue } }
-        set { lock.withLock { videoSinkValue = newValue } }
+        set {
+            lock.withLock {
+                videoSinkValue = newValue
+                if newValue == nil && pausedValue {
+                    pendingBuffer = nil
+                    pendingTime = .invalid
+                }
+            }
+            updateViewPause()
+        }
+    }
+
+    /**
+     * While true (e.g. Settings is open), stops rendering viewfinder frames to the screen: when no video recording is
+     * active, pauses the attached MTKView and drops incoming frames so no GPU work or base readbacks run; while
+     * recording, keeps encoding video frames without drawing to the screen.
+     */
+    public var paused: Bool {
+        get { lock.withLock { pausedValue } }
+        set {
+            let changed = lock.withLock { () -> Bool in
+                guard pausedValue != newValue else { return false }
+                pausedValue = newValue
+                if newValue && videoSinkValue == nil {
+                    pendingBuffer = nil
+                    pendingTime = .invalid
+                }
+                return true
+            }
+            if changed { updateViewPause() }
+        }
+    }
+
+    /** True when viewfinder rendering is fully paused (paused and not actively recording video). */
+    public var isRenderingPaused: Bool {
+        lock.withLock { pausedValue && videoSinkValue == nil }
     }
 
     /** Grain moves on the screen too (video mode), so the viewfinder's grain looks as the file's. */
@@ -176,14 +213,29 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
         view.framebufferOnly = true
         view.preferredFramesPerSecond = 30
         view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
-        view.isPaused = false
         view.enableSetNeedsDisplay = false
         view.delegate = self
+        lock.withLock { attachedView = view }
+        updateViewPause()
+    }
+
+    private func updateViewPause() {
+        let (view, pause) = lock.withLock { (attachedView, pausedValue && videoSinkValue == nil) }
+        guard let view else { return }
+        if Thread.isMainThread {
+            view.isPaused = pause
+        } else {
+            DispatchQueue.main.async { [weak self, weak view] in
+                guard let self, let view else { return }
+                view.isPaused = self.lock.withLock { self.pausedValue && self.videoSinkValue == nil }
+            }
+        }
     }
 
     /** A new camera frame (any thread): drawn with the next display refresh; older undrawn frames are dropped. */
     public func enqueue(_ buffer: CVPixelBuffer, time: CMTime = .invalid) {
         lock.withLock {
+            if pausedValue && videoSinkValue == nil { return }
             pendingBuffer = buffer
             pendingTime = time
         }
@@ -193,17 +245,27 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
 
     public func draw(in view: MTKView) {
         let start = Date()
-        let (buffer, time, f, p, loupe, sink, animate): (CVPixelBuffer?, CMTime, Frame?, ShaderParams?, Loupe?, VideoSink?, Bool) = lock.withLock {
+        let (buffer, time, f, p, loupe, sink, animate, isPaused): (CVPixelBuffer?, CMTime, Frame?, ShaderParams?, Loupe?, VideoSink?, Bool, Bool) = lock.withLock {
+            if pausedValue && videoSinkValue == nil {
+                pendingBuffer = nil
+                pendingTime = .invalid
+                return (nil, .invalid, nil, nil, nil, nil, false, true)
+            }
             let b = pendingBuffer
             pendingBuffer = nil
             if b != nil { frameIndex &+= 1 }
-            return (b, pendingTime, frameValue, paramsValue, loupeValue, videoSinkValue, animateGrainValue)
+            return (b, pendingTime, frameValue, paramsValue, loupeValue, videoSinkValue, animateGrainValue, pausedValue)
         }
+        if isPaused && sink == nil { return }
         guard let commands = ctx.queue.makeCommandBuffer() else { return }
         if let buffer, let f, let camera = cameraTexture(buffer) {
             linearizeFrame(commands, camera, f)
             // Only a new camera frame goes into the video, once.
             if let sink, let p, time.isValid { encodeVideo(commands, sink, p, f, time: time, grain: Float(frameIndex & 0xFFFF)) }
+        }
+        if isPaused {
+            commands.commit()
+            return
         }
         let grainFrame: Float = (animate || sink != nil) ? Float(frameIndex & 0xFFFF) : 0
         guard let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable else {

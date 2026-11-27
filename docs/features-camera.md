@@ -21,7 +21,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 
 | Feature | Since | Android | iOS | Notes |
 |---|---|---|---|---|
-| Live viewfinder developed with Auto's pipeline and a look | ≤1.1.1 | ✓ | ✓ | Same shader as Pro and Auto; the viewfinder is calibrated against the raw after each shot |
+| Live viewfinder developed with Auto's pipeline and a look | ≤1.1.1 | ✓ | ✓ | Same shader as Pro and Auto; the viewfinder is calibrated against the raw after each shot; pauses rendering and per-frame readbacks while Settings is open (unless recording video) |
 | **Scene recognition map** (`SceneRecognition`): sunny day with blue sky brightened moderately (highlight-safe, live viewfinder + saved shots) | unreleased | ✓ | ✓ | Extensible `CameraScene` → `SceneAdjustment` map in the shared engine; sunny blue-sky scenes lift up to +0.45 EV, smoothly blended by sky share and sunlight level and guarded against clipping |
 | Raw capture (DNG): RAW only by default, optional **Also save JPEG**, **Embedded preview** (`3000 px` / `12 MP` @ Q85 via Adobe DNG SDK) or **Pure RAW** | ≤1.1.1; RAW-only + preview unreleased | ✓ Camera2 `RAW_SENSOR` | ✓ ProRAW (Bayer as a setting) | RAW off by default since 1.1.6; when on, saves DNG only with a 3000 px Q85 processed preview by default (optional 12 MP @ Q85, or Pure RAW skipping develop) |
 | Lenses UW / W / T, selfie | ≤1.1.1 | ✓ | ✓ one physical lens at a time | |

@@ -48,7 +48,7 @@ data class ViewfinderEglConfig(
  * (the subject tracker). [videoSink]: the video encoder's surface while recording (see [ViewfinderRenderer.videoSink]); [videoMode] moves the grain with the frames. [turns]: clockwise quarter turns from the upright picture to the view (see
  * [ViewfinderRenderer.turns]). [eglConfig]: the view's EGL config; null leaves [GLSurfaceView]'s own
  * choice. Another config makes the view (and its renderer) again: a GL context's config is fixed, so the camera restarts
- * on the new view's surface.
+ * on the new view's surface. [paused]: stops viewfinder rendering while covered (e.g. Settings open) when not recording.
  */
 @Composable
 fun Viewfinder(
@@ -68,6 +68,7 @@ fun Viewfinder(
     videoMode: Boolean = false,
     fastMono: Boolean = false,
     eglConfig: ViewfinderEglConfig? = null,
+    paused: Boolean = false,
 ) {
     key(eglConfig) {
         val surfaceCallback = rememberUpdatedState(onSurfaceTexture)
@@ -80,6 +81,7 @@ fun Viewfinder(
                 onSurfaceTexture = { surfaceCallback.value(it) },
                 requestRender = { view[0]?.requestRender() },
                 onBase = { w, h, rgba, ns -> baseCallback.value(w, h, rgba, ns) },
+                queueGlEvent = { action -> view[0]?.queueEvent(action) },
             ).apply {
                 onSurfaceReady = { ms, hits, misses ->
                     app.rawboy.camera.StartupTrace.mark("shadersReady", "${ms}ms cache=$hits/$misses")
@@ -107,13 +109,16 @@ fun Viewfinder(
             },
         )
 
+        LaunchedEffect(paused) {
+            renderer.paused = paused
+        }
         LaunchedEffect(frame) {
             renderer.frame = frame
-            view[0]?.requestRender()
+            if (!paused || videoSink != null) view[0]?.requestRender()
         }
         LaunchedEffect(params) {
             renderer.params = params
-            view[0]?.requestRender()
+            if (!paused || videoSink != null) view[0]?.requestRender()
         }
         // Keyed on on/off only: a new lambda each recomposition mustn't restart it.
         LaunchedEffect(onLuma != null) {
@@ -126,14 +131,14 @@ fun Viewfinder(
         }
         LaunchedEffect(turns) {
             renderer.turns = turns
-            view[0]?.requestRender()
+            if (!paused || videoSink != null) view[0]?.requestRender()
         }
         LaunchedEffect(rawFrames) {
             renderer.rawFrames = rawFrames
         }
         LaunchedEffect(zoom) {
             renderer.zoom = zoom
-            view[0]?.requestRender()
+            if (!paused || videoSink != null) view[0]?.requestRender()
         }
         LaunchedEffect(videoSink) {
             renderer.videoSink = videoSink
@@ -141,15 +146,15 @@ fun Viewfinder(
         }
         LaunchedEffect(videoMode) {
             renderer.animateGrain = videoMode
-            view[0]?.requestRender()
+            if (!paused || videoSink != null) view[0]?.requestRender()
         }
         LaunchedEffect(fastMono) {
             renderer.fastMono = fastMono
-            view[0]?.requestRender()
+            if (!paused || videoSink != null) view[0]?.requestRender()
         }
         LaunchedEffect(loupe) {
             renderer.loupe = loupe
-            view[0]?.requestRender()
+            if (!paused || videoSink != null) view[0]?.requestRender()
         }
 
         val lifecycleOwner = LocalLifecycleOwner.current

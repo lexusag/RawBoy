@@ -505,6 +505,7 @@ fun CameraScreen(
                         videoMode = videoMode,
                         fastMono = shown.monoMode,
                         eglConfig = if (recordableViewfinder) ViewfinderEglConfig.RECORDABLE_RGBA8888 else null,
+                        paused = showSettings,
                     )
                     // The self-timer's countdown, big and upright over the picture.
                     selfTimerLeft?.let { left ->
