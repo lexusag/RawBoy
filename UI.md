@@ -16,12 +16,6 @@ The tone mapper row reads AgX, Filmic, Sigmoid, Film: a curve and a whole stock 
 
 ## RawBoy Camera
 
-### C2. Swipe the viewfinder to change look (High, M) — Android, iOS
-The look is a text dropdown under the viewfinder: two taps while framing, the menu covers the frame, and a look
-can't be previewed before choosing it.
-**Change:** swipe left/right on the viewfinder to step through looks, with the name shown briefly over the frame
-(like film-simulation dials). The dropdown stays for jumping straight to one.
-
 ### C3. Fold the sliders into one row (Medium, M) — Android, iOS
 Look, Strength, Brightness and Warmth are four permanent rows between viewfinder and shutter.
 **Change:** one row with the look name and an "adjust" button that slides the three sliders up over the bottom of
@@ -31,12 +25,6 @@ the viewfinder; a dot on the button when values differ from default.
 No composition aids.
 **Change:** a Settings switch for a thirds grid, and a level line that turns accent-coloured when the phone is
 straight (the orientation listener already exists for EXIF).
-
-### F1. Group the film stocks and show which one is loaded (Medium, S) — RawBoy Camera's Film mode, Android, iOS
-Twelve stocks plus Natural in one flat list; nothing says which are colour negative, cinema or slide, and the stock
-name is only in the small row under the viewfinder.
-**Change:** group the menu (Colour negative, Cinema on 2383, Slide, Natural) with a short note per stock, and show
-the stock name in a corner of the viewfinder.
 
 ## Web UI screenshots
 

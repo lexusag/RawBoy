@@ -249,6 +249,9 @@ data class CameraSettings(
         else -> Edition.look(lookId)
     }
 
+    /** The active mode's selectable looks or film stocks. */
+    val activeLooks: List<Look> get() = Edition.looksFor(monoMode, filmMode)
+
     /** Active camera mode name for metadata: `film`, `look`, or `bw`. */
     val cameraMode: String get() = when {
         monoMode -> "bw"

@@ -25,7 +25,9 @@ import app.rawboy.auto.analysis.SceneAnalyzer
 import app.rawboy.auto.analysis.SceneLight
 import app.rawboy.auto.analysis.SceneRecognition
 import app.rawboy.auto.analysis.SceneStats
+import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
+import app.rawboy.auto.looks.Looks
 import app.rawboy.camera.depth.DualPixelCalibrations
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FastLensCache
@@ -101,6 +103,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.async
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -905,12 +908,34 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Loads the active look's film stock or LUT into [ShotSaver]'s memory cache off the main thread. */
     private fun preloadActiveLook() {
-        val look = current.look
+        val s = current
+        val look = s.look
         viewModelScope.launch(Dispatchers.IO) {
             look.film?.let { runCatching { ShotSaver.loadFilm(app, it) } }
             look.lutId?.let { runCatching { ShotSaver.loadLut(app, it) } }
+            scheduleNeighborPreload(s)
         }
     }
+
+    /**
+     * Warms the immediate next and previous stocks/looks around [s]'s active pick after a short settle delay so
+     * swiping the viewfinder switches without disk/parse latency while never competing with startup or active loads.
+     */
+    private fun scheduleNeighborPreload(s: CameraSettings) {
+        neighborPreloadJob?.cancel()
+        if (s.easy || isStreetActive) return
+        val neighbors = Looks.neighbors(s.activeLooks, s.look.id)
+        if (neighbors.isEmpty()) return
+        neighborPreloadJob = viewModelScope.launch(Dispatchers.IO) {
+            delay(NEIGHBOR_PRELOAD_DELAY_MS)
+            for (look in neighbors) {
+                if (!isActive) return@launch
+                look.film?.let { runCatching { ShotSaver.loadFilm(app, it) } }
+                look.lutId?.let { runCatching { ShotSaver.loadLut(app, it) } }
+            }
+        }
+    }
+    private var neighborPreloadJob: Job? = null
 
     /**
      * Activates or clears the ephemeral Street session (e.g. power-button double-press or Street shortcut) without
@@ -1645,16 +1670,38 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     // ---- Controls ----
 
     /** Picks [id] for the current mode: B&W mode's stock, Film mode's stock or the colour look. */
-    fun setLook(id: String) = change {
-        when {
-            it.monoMode -> it.copy(monoLookId = id)
-            it.filmMode -> it.copy(filmLookId = id)
-            else -> it.copy(lookId = id)
+    fun setLook(id: String) {
+        neighborPreloadJob?.cancel()
+        change {
+            when {
+                it.monoMode -> it.copy(monoLookId = id)
+                it.filmMode -> it.copy(filmLookId = id)
+                else -> it.copy(lookId = id)
+            }
         }
+        scheduleNeighborPreload(current)
     }
-    fun setMono(on: Boolean) = change { it.copy(mono = on) }
+
+    /** Steps [delta] positions (+1 next, -1 previous, wrapping) through the active mode's looks. Disabled in Easy/Street and while recording. */
+    fun stepLook(delta: Int): Look? {
+        val s = current
+        if (s.easy || isStreetActive || _recordingMs.value != null) return null
+        val next = Looks.step(s.activeLooks, s.look.id, delta, wrap = true) ?: return null
+        setLook(next.id)
+        return next
+    }
+
+    fun setMono(on: Boolean) {
+        neighborPreloadJob?.cancel()
+        change { it.copy(mono = on) }
+        scheduleNeighborPreload(current)
+    }
     /** The Film toggle: colour photos on the film stocks or on the LUT looks. */
-    fun setFilm(on: Boolean) = change { it.copy(film = on) }
+    fun setFilm(on: Boolean) {
+        neighborPreloadJob?.cancel()
+        change { it.copy(film = on) }
+        scheduleNeighborPreload(current)
+    }
     fun setFilter(f: BwFilter) = change { it.copy(filter = f) }
     fun setStrength(v: Float) = change { it.copy(strength = v) }
     fun setBrightness(v: Float) = change { it.copy(brightness = v) }
@@ -2392,6 +2439,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
         /** Long side of the live histogram's copy: enough pixels for 64 bins, cheap every update. */
         private const val HISTOGRAM_SIZE = 128
+
+        /** Brief settle delay before background-preloading adjacent stocks so startup and active swipes run uncontended. */
+        private const val NEIGHBOR_PRELOAD_DELAY_MS = 150L
 
         /**
          * Half-size grain partly averages out when the photo is saved at 3000 px (area downscale ×1.36): measured

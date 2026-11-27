@@ -172,6 +172,8 @@ struct CameraSettings: Equatable {
         if filmMode { return Edition.filmLook(filmLookId) }
         return Edition.look(lookId)
     }
+    /** The active mode's selectable looks or film stocks. */
+    var activeLooks: [Look] { Edition.looksFor(monoMode: monoMode, filmMode: filmMode) }
 
     /**
      * base (the auto develop) with the look and the sliders, as the viewfinder shows it and the shot is saved. B&W mode:

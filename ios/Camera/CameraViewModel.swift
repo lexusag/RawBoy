@@ -268,6 +268,7 @@ final class CameraViewModel: ObservableObject {
                                                           saturation: Self.frameSaturation)
                 status = .ready
                 if lens.label != settings.lens { change { $0.lens = lens.label } }
+                scheduleNeighborPreload()
             } catch {
                 Self.log.error("camera start: \(error.localizedDescription)")
                 message = "Camera: \(error.localizedDescription)"
@@ -543,6 +544,9 @@ final class CameraViewModel: ObservableObject {
         }
     }
 
+    private var publishTask: Task<Void, Never>?
+    private var neighborPreloadTask: Task<Void, Never>?
+
     /** Viewfinder uniforms for the latest frame and the current controls. */
     private func publish() {
         guard let l = live, let f = renderer.frame else { return }
@@ -557,15 +561,39 @@ final class CameraViewModel: ObservableObject {
         let params = p
         let lutId = p.lut
         let filmId = p.film
-        Task {
+        publishTask?.cancel()
+        publishTask = Task {
             let lut = await lutId.asyncMap { try? await loadLut($0) } ?? nil
             let film = await filmId.asyncMap { try? await loadFilm($0) } ?? nil
+            guard !Task.isCancelled else { return }
             let lens = LensTransform(info: LensInfo.none(width: f.fullWidth, height: f.fullHeight), params: params)
             let shader = ShaderParams.from(params, asShot: l.defaults, lut: lut, lens: lens, base: l.base,
                                            bloomSources: nil, skinMask: nil, grainSizeScale: Self.grainSizeScale,
                                            grainStrength: Self.grainStrength(s), film: film)
             renderer.params = shader
             updateHistogram(shader, l.base)
+        }
+    }
+
+    /**
+     * Warms the immediate next and previous stocks/looks around the active pick after a short settle delay so
+     * swiping the viewfinder switches without disk/parse latency while never competing with the active load.
+     */
+    private func scheduleNeighborPreload() {
+        neighborPreloadTask?.cancel()
+        let neighbors = Looks.neighbors(settings.activeLooks, currentId: settings.look.id)
+        guard !neighbors.isEmpty else { return }
+        neighborPreloadTask = Task(priority: .utility) { [weak self] in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            guard !Task.isCancelled, let self else { return }
+            for look in neighbors {
+                guard !Task.isCancelled else { return }
+                if let filmId = look.film {
+                    _ = try? await self.loadFilm(filmId)
+                } else if let lutId = look.lutId {
+                    _ = try? await self.loadLut(lutId)
+                }
+            }
         }
     }
 
@@ -605,16 +633,37 @@ final class CameraViewModel: ObservableObject {
 
     // MARK: - Controls
 
-    /** Picks id for the current mode: B&W mode's stock or the colour look. */
     /** Picks id for the current mode: B&W mode's stock, Film mode's stock or the colour look. */
     func setLook(_ id: String) {
+        neighborPreloadTask?.cancel()
         change {
             if $0.monoMode { $0.monoLookId = id } else if $0.filmMode { $0.filmLookId = id } else { $0.lookId = id }
         }
+        scheduleNeighborPreload()
     }
-    func setMono(_ on: Bool) { change { $0.mono = on } }
+
+    /** Steps delta positions (+1 next, -1 previous, wrapping) through the active mode's looks. Locked while recording. */
+    @discardableResult
+    func stepLook(_ delta: Int) -> Look? {
+        guard recordingSeconds == nil else { return nil }
+        guard let next = Looks.step(settings.activeLooks, currentId: settings.look.id, delta: delta, wrap: true) else {
+            return nil
+        }
+        setLook(next.id)
+        return next
+    }
+
+    func setMono(_ on: Bool) {
+        neighborPreloadTask?.cancel()
+        change { $0.mono = on }
+        scheduleNeighborPreload()
+    }
     /** The Film toggle: colour photos on the film stocks or on the LUT looks. */
-    func setFilm(_ on: Bool) { change { $0.film = on } }
+    func setFilm(_ on: Bool) {
+        neighborPreloadTask?.cancel()
+        change { $0.film = on }
+        scheduleNeighborPreload()
+    }
     func setFilter(_ f: BwFilter) { change { $0.filter = f } }
     func setStrength(_ v: Float) { change { $0.strength = v } }
     func setBrightness(_ v: Float) {

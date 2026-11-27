@@ -32,10 +32,15 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
     /** Film grain and halation, 100 = the stock as formation.json describes it. */
     public var filmGrain: Float = 75
     public var halation: Float = 100
+    /** Short brand-free character note shown in pickers and the camera HUD. */
+    public var note: String? = nil
+    /** Film stock family for Film mode pickers, or nil for non-film looks. */
+    public var filmGroup: FilmStockGroup? = nil
 
     init(_ id: String, _ name: String, _ lutFile: String?, contrast: Float = 0, grain: Float = 0, bloom: Float = 0,
          highpass: Float = 0, vignette: Float = 0, warmth: Float = 0, portraitRetouch: Float = 0,
-         monochrome: Bool = false, experimental: Bool = false, film: String? = nil) {
+         monochrome: Bool = false, experimental: Bool = false, film: String? = nil,
+         note: String? = nil, filmGroup: FilmStockGroup? = nil) {
         self.id = id
         self.name = name
         self.lutFile = lutFile
@@ -49,6 +54,8 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
         self.monochrome = monochrome
         self.experimental = experimental
         self.film = film
+        self.note = note
+        self.filmGroup = filmGroup
     }
 
     /** LutEntry id, as LutRepository names bundled LUTs. */
@@ -78,6 +85,44 @@ public enum LookGroup: CaseIterable, Sendable {
     }
 }
 
+/** The pickers' sections of Film mode stocks, in the order they are shown. */
+public enum FilmStockGroup: String, CaseIterable, Sendable, Hashable {
+    case natural, colorNegative, cinema, slide
+
+    public var label: String {
+        switch self {
+        case .natural: "Natural"
+        case .colorNegative: "Colour negative"
+        case .cinema: "Cinema print"
+        case .slide: "Slide"
+        }
+    }
+
+    public var shortLabel: String {
+        switch self {
+        case .natural: "Natural"
+        case .colorNegative: "Negative"
+        case .cinema: "Cinema"
+        case .slide: "Slide"
+        }
+    }
+}
+
+/** One section of a film-stock picker, in catalogue order. */
+public struct FilmStockSection: Identifiable, Sendable {
+    public let group: FilmStockGroup
+    public let looks: [Look]
+    public var id: FilmStockGroup { group }
+}
+
+/** One section of any look or film-stock picker, in catalogue order. */
+public struct LookPickerSection: Identifiable, Sendable {
+    public let id: String
+    public let label: String
+    public let shortLabel: String
+    public let looks: [Look]
+}
+
 /**
  * The looks RawBoy Auto offers, built on the LUTs in <repo>/luts.
  *
@@ -88,53 +133,72 @@ public enum LookGroup: CaseIterable, Sendable {
  */
 public enum Looks {
     /** The auto develop alone (which already has a fine grain). */
-    public static let natural = Look("natural", "Natural", nil)
+    public static let natural = Look("natural", "Natural", nil, note: "Auto develop, no film look")
     /** The default: suggested for portraits and everyday scenes. */
     public static let portra400 = Look("portra400", "Yellow Portrait 400", "Yellow Portrait 400.cube",
-                                       grain: 20, bloom: 5, portraitRetouch: 20)
+                                       grain: 20, bloom: 5, portraitRetouch: 20,
+                                       note: "Soft skin tones, wide latitude")
     public static let portra800 = Look("portra800", "Yellow Portrait 800", "Yellow Portrait 800.cube",
-                                       grain: 35, bloom: 15, portraitRetouch: 20)
-    public static let ektar100 = Look("ektar100", "Yellow Vivid 100", "Yellow Vivid 100.cube", grain: 10, highpass: 10)
-    public static let gold200 = Look("gold200", "Yellow Warm 200", "Yellow Warm 200.cube", grain: 25, vignette: -10, warmth: 200)
-    public static let superia400 = Look("superia400", "Green Everyday 400", "Green Everyday 400.cube", grain: 25)
+                                       grain: 35, bloom: 15, portraitRetouch: 20,
+                                       note: "Warm shadows, faster film grain")
+    public static let ektar100 = Look("ektar100", "Yellow Vivid 100", "Yellow Vivid 100.cube", grain: 10, highpass: 10,
+                                      note: "Rich reds and blues, crisp detail")
+    public static let gold200 = Look("gold200", "Yellow Warm 200", "Yellow Warm 200.cube", grain: 25, vignette: -10, warmth: 200,
+                                     note: "Golden sunlit warmth, gentle vignette")
+    public static let superia400 = Look("superia400", "Green Everyday 400", "Green Everyday 400.cube", grain: 25,
+                                        note: "Punchy greens, everyday street colour")
     public static let fuji400h = Look("fuji400h", "Green Pastel 400", "Green Pastel 400.cube",
-                                      grain: 20, bloom: 5, portraitRetouch: 20)
+                                      grain: 20, bloom: 5, portraitRetouch: 20,
+                                      note: "Airy pastels, cool mint highlights")
     /** Tungsten cinema film, the base of CineStill 800T. */
-    public static let vision3500t = Look("vision500t", "Yellow Cine 500T", "Yellow Cine 500T.cube", grain: 35, bloom: 20)
+    public static let vision3500t = Look("vision500t", "Yellow Cine 500T", "Yellow Cine 500T.cube", grain: 35, bloom: 20,
+                                         note: "Tungsten cinema, soft highlight bloom")
     /** Slide film: vivid colour, deep shadows. */
-    public static let velvia50 = Look("velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube", grain: 8, vignette: -10)
+    public static let velvia50 = Look("velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube", grain: 8, vignette: -10,
+                                      note: "Vivid slide colour, deep shadows")
     /** Direct flash 35mm film scan: vivid cadmium red, warm peach skin, high-key cool background. */
-    public static let filmFlash = Look("filmflash", "Film Flash", "Film Flash.cube", grain: 20)
+    public static let filmFlash = Look("filmflash", "Film Flash", "Film Flash.cube", grain: 20,
+                                       note: "Cadmium reds, high-key cool flash scan")
     /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
     public static let movieGreen = Look("moviegreen", "Movie Green", "Movie Green.cube", grain: 20, vignette: -10,
-                                         experimental: true)
+                                         experimental: true, note: "Green-teal film grade, lifted blacks")
     public static let movieGreenV2 = Look("moviegreenv2", "Movie Green V2", "Movie Green V2.cube",
-                                          grain: 20, vignette: -10, experimental: true)
+                                          grain: 20, vignette: -10, experimental: true,
+                                          note: "Refined green-teal film grade")
     public static let redscale = Look("redscale", "Redscale", "Redscale.png", contrast: 5, grain: 30, vignette: -15,
-                                        experimental: true)
+                                        experimental: true, note: "Amber and crimson reversed emulsion")
     public static let redscaleV2 = Look("redscalev2", "Redscale V2", "Redscale V2.cube",
-                                        grain: 20, vignette: -10, experimental: true)
+                                        grain: 20, vignette: -10, experimental: true,
+                                        note: "Richer amber-red reversed emulsion")
     /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
-    public static let lagoon = Look("lagoon", "Lagoon", "Lagoon.cube", grain: 20, vignette: -10, experimental: true)
+    public static let lagoon = Look("lagoon", "Lagoon", "Lagoon.cube", grain: 20, vignette: -10, experimental: true,
+                                    note: "Turquoise skin, amber sky colour swap")
     /** Colour swap: greens turn violet, blue sky mint, reds stay (tools/swap_luts). */
     public static let violetDust = Look("violetdust", "Violet Dust", "Violet Dust.cube", grain: 20, vignette: -10,
-                                         experimental: true)
+                                         experimental: true, note: "Violet greens, mint sky colour swap")
     /** False-colour infrared: foliage and yellows turn crimson, magenta mids (tools/swap_luts). */
-    public static let unseen = Look("unseen", "Unseen", "Unseen.cube", grain: 20, vignette: -10, experimental: true)
+    public static let unseen = Look("unseen", "Unseen", "Unseen.cube", grain: 20, vignette: -10, experimental: true,
+                                    note: "False-colour crimson foliage")
     /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
-    public static let trixSoft = Look("trixsoft", "Yellow Mono Soft", "Yellow Mono Soft.cube", grain: 20, monochrome: true)
+    public static let trixSoft = Look("trixsoft", "Yellow Mono Soft", "Yellow Mono Soft.cube", grain: 20, monochrome: true,
+                                      note: "Soft paper grade, open shadows")
     /** Monochrome, classic: Tri-X on a normal paper grade. */
-    public static let trix400 = Look("trix400", "Yellow Mono 400", "Yellow Mono 400.cube", grain: 25, monochrome: true)
+    public static let trix400 = Look("trix400", "Yellow Mono 400", "Yellow Mono 400.cube", grain: 25, monochrome: true,
+                                     note: "Classic 400 contrast and grain")
     /** Monochrome, Tri-X developed longer: harder and grainier. */
-    public static let trixPush = Look("trixpush", "Yellow Mono Push", "Yellow Mono Push.cube", grain: 40, monochrome: true)
+    public static let trixPush = Look("trixpush", "Yellow Mono Push", "Yellow Mono Push.cube", grain: 40, monochrome: true,
+                                      note: "Pushed development, gritty contrast")
     /** Monochrome, hard: pushed Tri-X on a hard paper grade, deep blacks, bright whites. */
     public static let trixHard = Look("trixhard", "Yellow Mono Hard", "Yellow Mono Hard.cube",
-                                      grain: 30, vignette: -10, monochrome: true)
+                                      grain: 30, vignette: -10, monochrome: true,
+                                      note: "Hard paper, deep blacks and crisp whites")
     /** Monochrome, Eastman Double-X cinema film. */
-    public static let doubleX = Look("doublex", "Yellow Cine Mono", "Yellow Cine Mono.cube", grain: 20, monochrome: true)
+    public static let doubleX = Look("doublex", "Yellow Cine Mono", "Yellow Cine Mono.cube", grain: 20, monochrome: true,
+                                     note: "Cinema monochrome, silky midtones")
     /** Monochrome, soft: Double-X developed short on a soft paper grade, open shadows. */
     public static let doubleXSoft = Look("doublexsoft", "Yellow Cine Mono Soft", "Yellow Cine Mono Soft.cube",
-                                         grain: 20, monochrome: true)
+                                         grain: 20, monochrome: true,
+                                         note: "Soft cinema monochrome, open shadows")
 
     public static let all: [Look] = [
         natural, portra400, portra800, ektar100, gold200, superia400, fuji400h,
@@ -175,6 +239,64 @@ public enum Looks {
             return l.isEmpty ? nil : LookSection(group: g, looks: l)
         }
     }
+
+    /**
+     * Picker sections for any mode's list: Film stocks split by FilmStockGroup (Natural, Colour negative,
+     * Cinema print, Slide); LUT and B&W looks split by LookGroup.
+     */
+    public static func pickerSections(_ looks: [Look]) -> [LookPickerSection] {
+        if looks.contains(where: { $0.film != nil }) {
+            return FilmLooks.sections(looks).map { s in
+                LookPickerSection(id: s.group.rawValue, label: s.group.label, shortLabel: s.group.shortLabel, looks: s.looks)
+            }
+        }
+        return sections(looks).map { s in
+            let short: String
+            switch s.group {
+            case .color: short = "Colour"
+            case .experimental: short = "Experimental"
+            case .monochrome: short = "B&W"
+            }
+            return LookPickerSection(id: String(describing: s.group), label: s.group.label, shortLabel: short, looks: s.looks)
+        }
+    }
+
+    /** Display category label for a single look or film stock (shown in HUD and tray subtitle). */
+    public static func categoryLabel(_ look: Look) -> String {
+        if look.film != nil { return FilmLooks.group(look).label }
+        if look.id == natural.id { return FilmStockGroup.natural.label }
+        return look.group.label
+    }
+
+    /**
+     * Steps `delta` positions from `currentId` in `looks`, wrapping around by default.
+     * Returns nil when the list has fewer than two items, `delta` is zero, or clamping stays put.
+     */
+    public static func step(_ looks: [Look], currentId: String, delta: Int, wrap: Bool = true) -> Look? {
+        guard looks.count >= 2, delta != 0 else { return nil }
+        let cur = looks.firstIndex { $0.id == currentId } ?? 0
+        let next: Int
+        if wrap {
+            let m = (cur + delta) % looks.count
+            next = m < 0 ? m + looks.count : m
+        } else {
+            next = min(max(cur + delta, 0), looks.count - 1)
+        }
+        return next == cur ? nil : looks[next]
+    }
+
+    /** Immediate next and previous looks around `currentId` (wrapped) for background preloading. */
+    public static func neighbors(_ looks: [Look], currentId: String) -> [Look] {
+        guard looks.count >= 2 else { return [] }
+        var seen = Set<String>([currentId])
+        var out: [Look] = []
+        for delta in [1, -1] {
+            if let item = step(looks, currentId: currentId, delta: delta, wrap: true), seen.insert(item.id).inserted {
+                out.append(item)
+            }
+        }
+        return out
+    }
 }
 
 /**
@@ -189,32 +311,47 @@ public enum FilmLooks {
     /** RawBoy Camera's film grain, unchanged by that: its film looks keep their earlier 80. */
     public static let cameraFilmGrain: Float = 80
 
-    private static func stock(_ id: String, _ name: String, portraitRetouch: Float = 0) -> Look {
-        var look = Look(id, name, nil, portraitRetouch: portraitRetouch, film: id)
+    private static func stock(_ id: String, _ name: String, _ filmGroup: FilmStockGroup, _ note: String,
+                              portraitRetouch: Float = 0) -> Look {
+        var look = Look(id, name, nil, portraitRetouch: portraitRetouch, film: id, note: note, filmGroup: filmGroup)
         look.filmGrain = filmGrain
         return look
     }
 
-    public static let portra400 = stock("portra400", "Yellow Portrait 400", portraitRetouch: 20)
+    public static let portra400 = stock("portra400", "Yellow Portrait 400", .colorNegative,
+                                        "Soft skin tones, wide latitude", portraitRetouch: 20)
 
     public static let all: [Look] = [
         Looks.natural,
         portra400,
-        stock("portra800", "Yellow Portrait 800", portraitRetouch: 20),
-        stock("ektar100", "Yellow Vivid 100"),
-        stock("gold200", "Yellow Warm 200"),
-        stock("fuji400h", "Green Pastel 400", portraitRetouch: 20),
-        stock("xtra400", "Green Everyday 400"),
-        stock("vision250d", "Yellow Cine 250D"),
-        stock("vision500t", "Yellow Cine 500T"),
-        stock("velvia100", "Green Vivid Slide 100"),
-        stock("provia100", "Green Slide 100"),
-        stock("ektachrome100", "Yellow Slide 100"),
-        stock("kodachrome64", "Yellow Classic 64"),
+        stock("portra800", "Yellow Portrait 800", .colorNegative, "Warm shadows, punchier grain", portraitRetouch: 20),
+        stock("ektar100", "Yellow Vivid 100", .colorNegative, "Rich reds and blues, fine grain"),
+        stock("gold200", "Yellow Warm 200", .colorNegative, "Golden sunlit cast, warm mids"),
+        stock("fuji400h", "Green Pastel 400", .colorNegative, "Airy pastels, cool mint highlights", portraitRetouch: 20),
+        stock("xtra400", "Green Everyday 400", .colorNegative, "Punchy greens, crisp everyday colour"),
+        stock("vision250d", "Yellow Cine 250D", .cinema, "Daylight cinema print, smooth roll-off"),
+        stock("vision500t", "Yellow Cine 500T", .cinema, "Tungsten cinema, cool shadows and halation"),
+        stock("velvia100", "Green Vivid Slide 100", .slide, "Deep blacks, bold landscape saturation"),
+        stock("provia100", "Green Slide 100", .slide, "Crisp neutral slide, clean blues"),
+        stock("ektachrome100", "Yellow Slide 100", .slide, "Clean contrast, cool bright whites"),
+        stock("kodachrome64", "Yellow Classic 64", .slide, "Archival reds and yellows, dense contrast"),
     ]
 
     public static func byId(_ id: String) -> Look {
         let key = RetiredLooks.stock(id)
         return all.first { $0.id == key } ?? portra400
+    }
+
+    /** Film family of `look`: its `filmGroup`, or `.natural` for Natural. */
+    public static func group(_ look: Look) -> FilmStockGroup {
+        look.filmGroup ?? .natural
+    }
+
+    /** `looks` split into FilmStockGroup sections in order, empty sections omitted. */
+    public static func sections(_ looks: [Look]) -> [FilmStockSection] {
+        FilmStockGroup.allCases.compactMap { g in
+            let l = looks.filter { group($0) == g }
+            return l.isEmpty ? nil : FilmStockSection(group: g, looks: l)
+        }
     }
 }

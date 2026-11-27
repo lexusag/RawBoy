@@ -118,4 +118,23 @@ enum CameraOrientation {
         let k = ((turns % 4) + 4) % 4
         return k % 2 == 1 ? (long, short) : (short, long)
     }
+
+    /**
+     * Turns a drag translation (`dx`, `dy`) measured in upright-portrait viewfinder coordinates (inside `Turned`)
+     * back into screen coordinates and decides whether it is a horizontal swipe to step stocks:
+     * -1 for swipe right (previous stock), +1 for swipe left (next stock), 0 otherwise.
+     */
+    static func swipeStockDelta(dx: Double, dy: Double, turns: Int, threshold: Double) -> Int {
+        let k = ((turns % 4) + 4) % 4
+        let screenDx: Double
+        let screenDy: Double
+        switch k {
+        case 0: (screenDx, screenDy) = (dx, dy)
+        case 1: (screenDx, screenDy) = (-dy, dx)
+        case 2: (screenDx, screenDy) = (-dx, -dy)
+        default: (screenDx, screenDy) = (dy, -dx)
+        }
+        if abs(screenDx) < threshold || abs(screenDx) <= abs(screenDy) * 1.5 { return 0 }
+        return screenDx < 0 ? 1 : -1
+    }
 }

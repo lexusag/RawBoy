@@ -164,7 +164,20 @@ import android.content.pm.ApplicationInfo
 import app.rawboy.camera.platform.PlatformRegistry
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.text.style.TextAlign
+import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
+import app.rawboy.auto.looks.Looks
 import app.rawboy.color.BwFilter
 import app.rawboy.camera.BurstMode
 import app.rawboy.camera.DepthSource
@@ -177,7 +190,6 @@ import app.rawboy.camera.Edition
 import app.rawboy.view.LicensesDialog
 import app.rawboy.view.CompactSlider
 import app.rawboy.view.HelpButton
-import app.rawboy.view.LookDropdown
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -249,6 +261,19 @@ fun CameraScreen(
     var showSettings by remember { mutableStateOf(false) }
     val appName = remember { context.applicationInfo.loadLabel(context.packageManager).toString() }
     var showHelp by remember { mutableStateOf(false) }
+    var stockTrayOpen by remember { mutableStateOf(false) }
+    var stockHudSerial by remember { mutableIntStateOf(0) }
+    var stockHudVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(stockHudSerial) {
+        if (stockHudSerial > 0) {
+            stockHudVisible = true
+            delay(STOCK_HUD_MS)
+            stockHudVisible = false
+        }
+    }
+    LaunchedEffect(easy, street, recordingMs != null) {
+        if (easy || street || recordingMs != null) stockTrayOpen = false
+    }
     // Landscape: what the tall slider changes (S, B, W/F); Brightness first.
     var adjust by rememberSaveable { mutableStateOf(Adjust.BRIGHTNESS) }
     // Turned sideways the UI turns with the window, the viewfinder picture stays put on the glass.
@@ -390,24 +415,37 @@ fun CameraScreen(
             }
         }
         // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
-        val looks = when {
-            settings.monoMode -> Edition.monoLooks
-            settings.filmMode -> Edition.filmLooks
-            else -> Edition.looks
+        val looks = settings.activeLooks
+        val canSwipeStock = !easy && !street && recordingMs == null && looks.size > 1
+        val stepStock = { delta: Int ->
+            if (vm.stepLook(delta) != null) {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                if (!stockTrayOpen) stockHudSerial++
+                true
+            } else {
+                false
+            }
+        }
+        val toggleFilm = { on: Boolean ->
+            vm.setFilm(on)
+            if (!stockTrayOpen) stockHudSerial++
+        }
+        val toggleMono = { on: Boolean ->
+            vm.setMono(on)
+            if (!stockTrayOpen) stockHudSerial++
         }
         // The Film and B&W toggles side by side in the label's place, each on or off by itself; B&W wins while on.
         val lookRow = @Composable { toggleWidth: Dp ->
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(Modifier.width(toggleWidth), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilmToggle(settings.film, vm::setFilm)
-                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
+                    FilmToggle(settings.film, toggleFilm)
+                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, toggleMono)
                 }
-                LookDropdown(
-                    label = "",
-                    looks = looks,
-                    selected = looks.firstOrNull { it.id == settings.look.id },
-                    onSelect = { vm.setLook(it.id) },
-                    labelWidth = 0.dp,
+                StockPillButton(
+                    name = settings.look.name,
+                    open = stockTrayOpen,
+                    enabled = recordingMs == null,
+                    onClick = { stockTrayOpen = !stockTrayOpen },
                     modifier = Modifier.weight(1f),
                 )
             }
@@ -493,7 +531,7 @@ fun CameraScreen(
                     // Video is a 16:9 (or 9:16) slice of the 4:3 viewfinder: shade what the file will not have.
                     // With motion data (experimental) the whole 4:3 frame is recorded: nothing to shade.
                     if (videoMode && !shown.videoMotionData) VideoFrameMask(if (turns % 2 == 1) 16f / 9f else 9f / 16f)
-                    // Taps, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
+                    // Taps, swipes, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
                     Box(
                         Modifier
                             .matchParentSize()
@@ -505,7 +543,15 @@ fun CameraScreen(
                         Box(
                             Modifier
                                 .matchParentSize()
-                                // Pinch: two fingers zoom (the tap and hold below only see a single finger).
+                                .semantics {
+                                    if (canSwipeStock) {
+                                        customActions = listOf(
+                                            CustomAccessibilityAction(tr("Next stock")) { stepStock(1) },
+                                            CustomAccessibilityAction(tr("Previous stock")) { stepStock(-1) },
+                                        )
+                                    }
+                                }
+                                // Pinch: two fingers zoom (the single-finger gesture below yields as soon as a second finger lands).
                                 .pointerInput(Unit) {
                                     awaitEachGesture {
                                         awaitFirstDown(requireUnconsumed = false)
@@ -519,32 +565,73 @@ fun CameraScreen(
                                         } while (event.changes.any { it.pressed })
                                     }
                                 }
-                                .pointerInput(simpleTouch, tapToShoot) {
-                                    detectTapGestures(
-                                        // Tap: immediate shutter in Street tap-to-shoot, else focus lock at that point.
-                                        onTap = {
-                                            if (tapToShoot) vm.shutter() else vm.focusAt(it.x / size.width, it.y / size.height)
-                                        },
-                                        onLongPress = {}, // a hold compares (onPress); it mustn't also focus on release
-                                        onPress = {
-                                            // Easy & Street mode: a hold does nothing special (a finger resting on the picture
-                                            // mustn't change what it shows).
-                                            if (!simpleTouch) {
-                                                // Press and hold: the auto develop without the look.
-                                                val hold = scope.launch {
-                                                    delay(COMPARE_DELAY_MS)
-                                                    vm.setCompare(true)
-                                                }
-                                                tryAwaitRelease()
-                                                hold.cancel()
-                                                if (vm.compare.value) vm.setCompare(false)
+                                .pointerInput(simpleTouch, tapToShoot, canSwipeStock, turns, stockTrayOpen) {
+                                    val touchSlop = viewConfiguration.touchSlop
+                                    val swipeThreshold = STOCK_SWIPE_THRESHOLD.toPx()
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown(requireUnconsumed = true)
+                                        val start = down.position
+                                        var lastPos = start
+                                        var moved = false
+                                        var multiTouch = false
+                                        var compared = false
+                                        val holdJob = if (!simpleTouch && !stockTrayOpen) {
+                                            scope.launch {
+                                                delay(COMPARE_DELAY_MS)
+                                                compared = true
+                                                vm.setCompare(true)
                                             }
-                                        },
-                                    )
+                                        } else {
+                                            null
+                                        }
+                                        try {
+                                            while (true) {
+                                                val event = awaitPointerEvent()
+                                                if (event.changes.count { it.pressed } >= 2) {
+                                                    multiTouch = true
+                                                    holdJob?.cancel()
+                                                    if (vm.compare.value) vm.setCompare(false)
+                                                }
+                                                val change = event.changes.firstOrNull { it.id == down.id }
+                                                if (change != null) {
+                                                    if (change.isConsumed) {
+                                                        multiTouch = true
+                                                        holdJob?.cancel()
+                                                        if (vm.compare.value) vm.setCompare(false)
+                                                    } else {
+                                                        lastPos = change.position
+                                                        if (!moved && (lastPos - start).getDistance() > touchSlop) {
+                                                            moved = true
+                                                            holdJob?.cancel()
+                                                            if (vm.compare.value) vm.setCompare(false)
+                                                        }
+                                                    }
+                                                }
+                                                if (event.changes.none { it.pressed }) break
+                                            }
+                                        } finally {
+                                            holdJob?.cancel()
+                                            if (vm.compare.value) vm.setCompare(false)
+                                        }
+                                        if (multiTouch || compared) return@awaitEachGesture
+                                        if (!moved) {
+                                            // Tap closes the stock tray if open, otherwise shoots (Street tap-to-shoot) or locks focus.
+                                            if (stockTrayOpen) {
+                                                stockTrayOpen = false
+                                            } else if (tapToShoot) {
+                                                vm.shutter()
+                                            } else {
+                                                vm.focusAt(start.x / size.width, start.y / size.height)
+                                            }
+                                        } else if (canSwipeStock) {
+                                            val delta = swipeStockDelta(lastPos.x - start.x, lastPos.y - start.y, turns, swipeThreshold)
+                                            if (delta != 0) stepStock(delta)
+                                        }
+                                    }
                                 },
                         )
                         // Over the tap area, under the lens selector and the AF LOCK badge.
-                        if (!easy && !street) shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
+                        if (!easy && !street && !stockTrayOpen) shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
                     }
                     when (status) {
                         CameraStatus.NEEDS_PERMISSION -> Button(onClick = requestPermission) { Text(tr("Allow camera")) }
@@ -552,8 +639,8 @@ fun CameraScreen(
                         CameraStatus.FAILED -> Text(tr("Camera unavailable"), color = MaterialTheme.colorScheme.error)
                         CameraStatus.READY -> Unit // live passthrough draws on frame 0 before params arrives
                     }
-                    // Landscape has them beside the S/B/W buttons, under the thumb.
-                    if (lenses.size > 1 && !landscape) {
+                    // Landscape has them beside the S/B/W buttons, under the thumb. Hidden while the stock tray is open.
+                    if (lenses.size > 1 && !landscape && !stockTrayOpen) {
                         LensSelector(
                             labels = lenses.map { it.label },
                             selected = settings.lens,
@@ -578,7 +665,7 @@ fun CameraScreen(
                         )
                     }
                     // A narrow column in the bottom right corner, beside the lens selector.
-                    if (shown.showZoomControl) {
+                    if (shown.showZoomControl && !stockTrayOpen) {
                         ZoomControl(
                             zoom = zoom,
                             onZoom = vm::setZoom,
@@ -588,15 +675,17 @@ fun CameraScreen(
                         )
                     }
                     // Above the lens selector, out of the way of the focus ring and the top badges.
-                    qrCode?.let { code ->
-                        QrChip(
-                            code,
-                            onOpen = { openQr(code) },
-                            onDismiss = vm::dismissQr,
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
-                        )
+                    if (!stockTrayOpen) {
+                        qrCode?.let { code ->
+                            QrChip(
+                                code,
+                                onOpen = { openQr(code) },
+                                onDismiss = vm::dismissQr,
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
+                            )
+                        }
                     }
                     Box(Modifier.matchParentSize().turned(turns)) {
                         shownFocus?.let { (x, y) -> FocusRing(x, y, if (dragPoint != null) null else afState, focusSize) }
@@ -644,15 +733,51 @@ fun CameraScreen(
                                 .background(Color.Black.copy(alpha = blink.value)),
                         )
                     }
-                    // Top right; the lock chips stack at the top left.
-                    if (shown.showHistogram && params != null) {
-                        HistogramView(
-                            histogram,
-                            Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(8.dp)
-                                .size(width = 120.dp, height = 48.dp),
-                            background = Color(0x99000000),
+                    // Top right: histogram (when on) and quiet loaded-stock badge (tap to open stock tray).
+                    Column(
+                        Modifier.align(Alignment.TopEnd).padding(8.dp),
+                        horizontalAlignment = Alignment.End,
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        if (shown.showHistogram && params != null) {
+                            HistogramView(
+                                histogram,
+                                Modifier.size(width = 120.dp, height = 48.dp),
+                                background = Color(0x99000000),
+                            )
+                        }
+                        if (!easy && !street && !stockTrayOpen && !compare) {
+                            LoadedStockBadge(
+                                name = settings.look.name,
+                                enabled = recordingMs == null,
+                                onClick = { stockTrayOpen = true },
+                            )
+                        }
+                    }
+                    // Transient HUD over the frame when swiping stocks or toggling Film/B&W.
+                    AnimatedVisibility(
+                        visible = stockHudVisible && !easy && !street && !stockTrayOpen && !compare,
+                        enter = fadeIn(tween(120)),
+                        exit = fadeOut(tween(260)),
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp, start = 24.dp, end = 24.dp),
+                    ) {
+                        StockSwitchHud(settings.look)
+                    }
+                    // Non-blocking bottom-docked stock tray: keeps the upper viewfinder live while auditioning stocks.
+                    AnimatedVisibility(
+                        visible = stockTrayOpen && !easy && !street && recordingMs == null,
+                        enter = slideInVertically(tween(180)) { it } + fadeIn(tween(140)),
+                        exit = slideOutVertically(tween(160)) { it } + fadeOut(tween(120)),
+                        modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+                    ) {
+                        StockTray(
+                            looks = looks,
+                            selected = settings.look,
+                            onSelect = { look ->
+                                vm.setLook(look.id)
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            },
+                            onClose = { stockTrayOpen = false },
                         )
                     }
                     if (compare) {
@@ -761,20 +886,19 @@ fun CameraScreen(
                         } else {
                             null
                         },
-                        // The stock menu across the column, the Film and B&W buttons under it.
+                        // The stock button across the column, the Film and B&W buttons under it.
                         lookRow = {
                             Column(horizontalAlignment = Alignment.End) {
-                                LookDropdown(
-                                    label = "",
-                                    looks = looks,
-                                    selected = looks.firstOrNull { it.id == settings.look.id },
-                                    onSelect = { vm.setLook(it.id) },
-                                    labelWidth = 0.dp,
+                                StockPillButton(
+                                    name = settings.look.name,
+                                    open = stockTrayOpen,
+                                    enabled = recordingMs == null,
                                     alignEnd = true,
+                                    onClick = { stockTrayOpen = !stockTrayOpen },
                                 )
                                 Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    FilmToggle(settings.film, vm::setFilm)
-                                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
+                                    FilmToggle(settings.film, toggleFilm)
+                                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, toggleMono)
                                 }
                             }
                         },
@@ -1359,6 +1483,284 @@ private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modif
         contentAlignment = Alignment.Center,
     ) {
         Icon(FilmIcon, contentDescription = null, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(22.dp))
+    }
+}
+
+/**
+ * Pill button showing the loaded stock/look and toggling the non-blocking [StockTray] over the bottom of the viewfinder.
+ */
+@Composable
+private fun StockPillButton(
+    name: String,
+    open: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    alignEnd: Boolean = false,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (alignEnd) Arrangement.End else Arrangement.Start,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        OutlinedButton(
+            onClick = onClick,
+            enabled = enabled,
+            border = BorderStroke(1.dp, if (open) accent else MaterialTheme.colorScheme.outline),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = if (open) accent.copy(alpha = 0.14f) else Color.Transparent,
+            ),
+            contentPadding = PaddingValues(start = 14.dp, end = 8.dp),
+            modifier = Modifier
+                .heightIn(min = 36.dp)
+                .semantics {
+                    contentDescription = tr("Film stock, %s", name)
+                    stateDescription = if (open) tr("Open") else tr("Closed")
+                },
+        ) {
+            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+            Icon(
+                Icons.Filled.ArrowDropDown,
+                contentDescription = null,
+                modifier = Modifier.graphicsLayer { rotationZ = if (open) 180f else 0f },
+            )
+        }
+    }
+}
+
+/** Quiet corner indicator showing which stock/look is loaded; tapping opens the stock tray. */
+@Composable
+private fun LoadedStockBadge(
+    name: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color(0x99000000))
+            .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .semantics { contentDescription = tr("Loaded stock, %s", name) }
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+    ) {
+        Box(
+            Modifier
+                .size(6.dp)
+                .clip(CircleShape)
+                .background(accent),
+        )
+        Text(
+            name,
+            style = MaterialTheme.typography.labelMedium,
+            color = Color.White.copy(alpha = 0.92f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.widthIn(max = 170.dp),
+        )
+    }
+}
+
+/** Brief translucent readout over the viewfinder when swiping stocks or toggling Film/B&W. */
+@Composable
+private fun StockSwitchHud(look: Look) {
+    val accent = MaterialTheme.colorScheme.primary
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xCC121214))
+            .border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(12.dp))
+            .padding(horizontal = 14.dp, vertical = 8.dp),
+    ) {
+        Text(
+            tr(Looks.categoryLabel(look)).uppercase(),
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.6.sp),
+            color = accent,
+            maxLines = 1,
+        )
+        Text(
+            look.name,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        look.note?.let { note ->
+            Text(
+                tr(note),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.72f),
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+/**
+ * Non-blocking bottom-docked stock picker over the bottom edge of the viewfinder: category filter chips when the mode
+ * has multiple families (Colour negative / Cinema print / Slide, or Colour / Experimental), a horizontally scrollable
+ * strip of stocks that stays open so each tap previews live, and a 1-line character note for the loaded stock.
+ */
+@Composable
+private fun StockTray(
+    looks: List<Look>,
+    selected: Look,
+    onSelect: (Look) -> Unit,
+    onClose: () -> Unit,
+) {
+    val accent = MaterialTheme.colorScheme.primary
+    val sections = remember(looks) { Looks.pickerSections(looks) }
+    var activeCategory by remember(looks) { mutableStateOf<String?>(null) }
+    val filterableSections = remember(sections) {
+        if (sections.size > 1) sections.filter { it.id != "NATURAL" } else emptyList()
+    }
+    val visibleLooks = remember(looks, sections, activeCategory) {
+        activeCategory?.let { cat -> sections.firstOrNull { it.id == cat }?.looks } ?: looks
+    }
+    val listState = rememberLazyListState()
+    LaunchedEffect(selected.id, visibleLooks) {
+        val index = visibleLooks.indexOfFirst { it.id == selected.id }
+        if (index >= 0) listState.animateScrollToItem(index)
+    }
+
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xEB121214))
+            .border(BorderStroke(1.dp, Color(0xFF333338)))
+            // Consume taps on the tray surface so they don't fall through to viewfinder focus/dismiss.
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {}
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .horizontalScroll(rememberScrollState()),
+            ) {
+                if (filterableSections.isNotEmpty()) {
+                    StockCategoryChip(
+                        label = tr("All"),
+                        selected = activeCategory == null,
+                        accent = accent,
+                        onClick = { activeCategory = null },
+                    )
+                    for (sec in filterableSections) {
+                        StockCategoryChip(
+                            label = tr(sec.shortLabel),
+                            selected = activeCategory == sec.id,
+                            accent = accent,
+                            onClick = { activeCategory = sec.id },
+                        )
+                    }
+                } else {
+                    Text(
+                        tr(Looks.categoryLabel(selected)),
+                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                        color = accent,
+                    )
+                }
+            }
+            Text(
+                tr("Done"),
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onClose)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+        }
+
+        LazyRow(
+            state = listState,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            items(visibleLooks, key = { it.id }) { look ->
+                val isSelected = look.id == selected.id
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (isSelected) accent else Color(0xFF1C1C1E))
+                        .border(1.dp, if (isSelected) accent else Color(0xFF333338), RoundedCornerShape(8.dp))
+                        .clickable { onSelect(look) }
+                        .semantics { this.selected = isSelected }
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        look.name,
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                        ),
+                        color = if (isSelected) Color(0xFF1A1206) else Color(0xFFECECEC),
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+
+        val noteText = selected.note?.let { tr(it) }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                tr(Looks.categoryLabel(selected)),
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = accent,
+                maxLines = 1,
+            )
+            if (noteText != null) {
+                Text(
+                    " · $noteText",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9A9AA2),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StockCategoryChip(
+    label: String,
+    selected: Boolean,
+    accent: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (selected) accent else Color(0xFF26262A))
+            .clickable(onClick = onClick)
+            .semantics { this.selected = selected }
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            ),
+            color = if (selected) Color(0xFF1A1206) else Color(0xFFD0D0D6),
+            maxLines = 1,
+        )
     }
 }
 
@@ -2580,6 +2982,8 @@ private fun SettingSwitch(
 private val EXPERIMENTAL_ORANGE = Color(0xFFFF9100)
 
 private const val COMPARE_DELAY_MS = 250L
+private val STOCK_SWIPE_THRESHOLD = 48.dp
+private const val STOCK_HUD_MS = 1350L
 
 /** Grab area around the focus ring (the ring is 72 dp). */
 private val FOCUS_HANDLE_SIZE = 96.dp
