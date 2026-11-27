@@ -313,6 +313,48 @@ class MaxResDngWriterTest {
         assertArrayEquals(singleOut.toByteArray(), multiOut.toByteArray())
     }
 
+    @Test
+    fun colorProfileEntriesDefaultsMissingCalibrationIlluminant1ToD65() {
+        val id = Array(9) { i -> (if (i % 4 == 0) 1 else 0) to 1 }
+
+        // Case 1: ColorMatrix1 present, CalibrationIlluminant1 missing (OnePlus 11 front camera).
+        val missingIll1 = MaxResDngWriter.colorProfileEntries(
+            ill1 = null, ill2 = null, cm1 = id, cm2 = null,
+            cal1 = null, cal2 = null, fm1 = null, fm2 = null,
+        ).associateBy { it.tag }
+        assertNotNull(missingIll1[50721]) // ColorMatrix1
+        assertEquals(21, ByteBuffer.wrap(missingIll1[50778]!!.bytes).order(ByteOrder.LITTLE_ENDIAN).getShort(0).toInt())
+
+        // Case 2: Both ColorMatrix1 and ColorMatrix2 missing -> falls back to sRGB D65 matrix + D65 illuminant.
+        val uncalibrated = MaxResDngWriter.colorProfileEntries(
+            ill1 = null, ill2 = null, cm1 = null, cm2 = null,
+            cal1 = null, cal2 = null, fm1 = null, fm2 = null,
+        ).associateBy { it.tag }
+        assertNotNull(uncalibrated[50721])
+        assertEquals(21, ByteBuffer.wrap(uncalibrated[50778]!!.bytes).order(ByteOrder.LITTLE_ENDIAN).getShort(0).toInt())
+
+        // Case 3: Slot 1 missing, slot 2 present -> slot 2 promoted to slot 1.
+        val promoted = MaxResDngWriter.colorProfileEntries(
+            ill1 = null, ill2 = 17, cm1 = null, cm2 = id,
+            cal1 = null, cal2 = null, fm1 = null, fm2 = null,
+        ).associateBy { it.tag }
+        assertNotNull(promoted[50721])
+        assertEquals(17, ByteBuffer.wrap(promoted[50778]!!.bytes).order(ByteOrder.LITTLE_ENDIAN).getShort(0).toInt())
+        assertTrue(50779 !in promoted)
+    }
+
+    @Test
+    fun writeBufferPixelsStreamsAllStripsWithoutMutatingPosition() {
+        val w = 8
+        val h = 7
+        val raw = ByteArray(w * h * 2) { (it * 31 + 7).toByte() }
+        val buf = ByteBuffer.wrap(raw)
+        val out = ByteArrayOutputStream()
+        MaxResDngWriter.writeBufferPixels(buf, w, h, rowsPerStrip = 2, out)
+        assertArrayEquals(raw, out.toByteArray())
+        assertEquals(0, buf.position())
+    }
+
     private fun remosaicFull(
         quad: ShortArray,
         w: Int,

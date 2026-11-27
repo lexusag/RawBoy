@@ -1514,13 +1514,75 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         }
         if (immediate != null) return immediate
         val d = deferred!!
-        DngCreator(d.inf.characteristics, d.result).use { dng ->
-            dng.setOrientation(exifOrientation)
-            dng.setDescription(d.description)
-            location?.let(dng::setLocation)
-            dng.writeByteBuffer(out, Size(d.width, d.height), d.buffer, 0)
-        }
+        writeDngBuffer(d.inf.characteristics, d.result, d.width, d.height, d.buffer, exifOrientation, location, d.description, out)
         return d.still
+    }
+
+    /**
+     * Writes a tightly-packed 16-bit Bayer [buffer] to [out] as a DNG. Uses Android's [DngCreator] when the camera's
+     * metadata satisfies it, and falls back to [MaxResDngWriter.writeBuffer] when `DngCreator` rejects missing or
+     * incomplete HAL metadata (e.g. OnePlus 11 front camera omitting `SENSOR_REFERENCE_ILLUMINANT1`, which causes
+     * `IllegalArgumentException: Missing metadata fields for tag CalibrationIlluminant1 (c65a)`).
+     */
+    private fun writeDngBuffer(
+        characteristics: CameraCharacteristics,
+        result: CaptureResult,
+        width: Int,
+        height: Int,
+        buffer: ByteBuffer,
+        exifOrientation: Int,
+        location: Location?,
+        description: String,
+        out: OutputStream,
+    ) {
+        val startPos = buffer.position()
+        val counting = CountingOutputStream(out)
+        val fallbackReason: String? = if (characteristics.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1) == null) {
+            "missing SENSOR_REFERENCE_ILLUMINANT1"
+        } else {
+            try {
+                DngCreator(characteristics, result).use { dng ->
+                    dng.setOrientation(exifOrientation)
+                    dng.setDescription(description)
+                    location?.let(dng::setLocation)
+                    dng.writeByteBuffer(counting, Size(width, height), buffer, 0)
+                }
+                return
+            } catch (e: IllegalArgumentException) {
+                if (counting.bytesWritten > 0L) throw e
+                e.message ?: "IllegalArgumentException"
+            }
+        }
+        Log.w(TAG, "DngCreator unavailable ($fallbackReason); writing DNG with MaxResDngWriter")
+        buffer.position(startPos)
+        MaxResDngWriter.writeBuffer(
+            characteristics = characteristics,
+            result = result,
+            width = width,
+            height = height,
+            buffer = buffer,
+            exifOrientation = exifOrientation,
+            location = location,
+            description = description,
+            out = out,
+        )
+    }
+
+    private class CountingOutputStream(private val delegate: OutputStream) : OutputStream() {
+        var bytesWritten: Long = 0L
+            private set
+
+        override fun write(b: Int) {
+            delegate.write(b)
+            bytesWritten++
+        }
+
+        override fun write(b: ByteArray, off: Int, len: Int) {
+            delegate.write(b, off, len)
+            bytesWritten += len
+        }
+
+        override fun flush() = delegate.flush()
     }
 
     private class ZslSingleFrame(val result: CaptureResult, val width: Int, val height: Int, val buffer: ByteBuffer)
@@ -1881,12 +1943,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             )
             val effective = 1f + weights.sum()
             val description = "RawBoy merge=zsl frames=${weights.size + 1}/$frames effective=${"%.2f".format(java.util.Locale.ROOT, effective)} $note".trim()
-            DngCreator(inf.characteristics, d.reference).use { dng ->
-                dng.setOrientation(exifOrientation)
-                dng.setDescription(description)
-                location?.let(dng::setLocation)
-                dng.writeByteBuffer(out, Size(d.width, d.height), merged, 0)
-            }
+            writeDngBuffer(inf.characteristics, d.reference, d.width, d.height, merged, exifOrientation, location, description, out)
             return Still(
                 d.reference, null, effectiveFrames = effective,
                 compensationEv = shutterEv ?: appliedCompensationEv(_frames.value),
@@ -2027,12 +2084,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 "noise ${noiseModel(reference).let { "${it.first} ${it.second}" }}")
             val effective = 1f + weights.sum()
             val description = "RawBoy merge=on frames=${weights.size + 1}/$frames effective=${"%.2f".format(java.util.Locale.ROOT, effective)} $note".trim()
-            DngCreator(inf.characteristics, reference).use { dng ->
-                dng.setOrientation(exifOrientation)
-                dng.setDescription(description)
-                location?.let(dng::setLocation)
-                dng.writeByteBuffer(out, Size(width, height), merged, 0)
-            }
+            writeDngBuffer(inf.characteristics, reference, width, height, merged, exifOrientation, location, description, out)
             val (depth, dualPixel) = depthFor(reference, exifOrientation)
             return Still(
                 reference, null, effectiveFrames = effective, compensationEv = shutterEv ?: appliedCompensationEv(_frames.value),
@@ -2275,12 +2327,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             val stacked = withContext(Dispatchers.Default) { LongExposureNative.finish(h, width, height) }
             Log.d(TAG, "long exposure: $frames frames in ${(System.nanoTime() - started) / 1_000_000} ms (${spec.seconds} s, ${if (spec.lighten) "lighten" else "average"}, $failed failed)")
             val description = "RawBoy long-exposure=${if (spec.lighten) "lighten" else "average"} seconds=${spec.seconds} frames=$frames $note".trim()
-            DngCreator(inf.characteristics, ref).use { dng ->
-                dng.setOrientation(exifOrientation)
-                dng.setDescription(description)
-                location?.let(dng::setLocation)
-                dng.writeByteBuffer(out, Size(width, height), stacked, 0)
-            }
+            writeDngBuffer(inf.characteristics, ref, width, height, stacked, exifOrientation, location, description, out)
             // Averaging N frames cuts noise about like merging N (see burstDng); a lighten stack keeps each frame's.
             val effective = if (spec.lighten) 1f else frames.toFloat().coerceIn(1f, 8f)
             return Still(ref, null, effectiveFrames = effective, compensationEv = shutterEv ?: if (manualExposure) compensationEv() else appliedCompensationEv(_frames.value), description = description)
