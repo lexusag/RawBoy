@@ -1111,6 +1111,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   reference includes the bad one): the ghost check drops them. The run's ends are refined to the row (a block-level
   start missed ~150 rows).
 - DNG SDK build: XMP toolkit is omitted; `dng_jxl.cpp` is patched at configure time to guard two XMP uses.
+- **DNG embedded preview orientation** (2026-11-27): IFD0's `Orientation` tag (274) applies to both the raw SubIFD and every embedded preview IFD. Embedding an already-upright JPEG preview makes viewers (Google Photos, Android Gallery, etc.) apply IFD0 `Orientation` a second time, turning portrait RAWs sideways and reverse-landscape RAWs upside down. Inverse-orient the preview pixels back into sensor orientation (`PreviewOrientation.inverse(image.lens.orientation)` in `Exporter.exportJpegBytes`/`exportJpegData` and `ShotSaver`/`CameraViewModel.makePreviewJpeg`), and re-apply `image.lens.orientation` when building the viewfinder shutter thumbnail from the preview bytes.
 
 ## Conventions
 
