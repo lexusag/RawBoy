@@ -363,7 +363,7 @@ struct CameraScreen: View {
                 if vm.compare {
                     OverlayLabel("Without look").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                // Top right: histogram (Settings), raw format badge when non-default, and quiet loaded-stock badge.
+                // Top right: the histogram (Settings), then the raw format when it isn't the chosen one.
                 VStack(alignment: .trailing, spacing: 6) {
                     if vm.settings.showHistogram {
                         HistogramView(histogram: vm.histogram)
@@ -376,11 +376,6 @@ struct CameraScreen: View {
                             .padding(.horizontal, 8)
                             .padding(.vertical, 4)
                             .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
-                    }
-                    if !stockTrayOpen && !vm.compare {
-                        LoadedStockBadge(name: vm.settings.look.name, enabled: vm.recordingSeconds == nil) {
-                            withAnimation(.easeOut(duration: 0.18)) { stockTrayOpen = true }
-                        }
                     }
                 }
                 .padding([.top, .trailing], 10)
@@ -844,36 +839,6 @@ private struct LookPicker: View {
             }
         }
         .frame(height: ValueSlider.rowHeight)
-    }
-}
-
-/** Quiet corner indicator showing which stock/look is loaded; tapping opens the stock tray. */
-private struct LoadedStockBadge: View {
-    let name: String
-    let enabled: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Button(action: onTap) {
-            HStack(spacing: 6) {
-                Circle()
-                    .fill(Color.cameraAccent)
-                    .frame(width: 6, height: 6)
-                Text(name)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.white.opacity(0.92))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-            }
-            .padding(.horizontal, 9)
-            .padding(.vertical, 5)
-            .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.15), lineWidth: 1))
-            .frame(maxWidth: 180, alignment: .trailing)
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-        .accessibilityLabel("Loaded stock, \(name)")
     }
 }
 

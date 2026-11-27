@@ -631,8 +631,6 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Попередня плівка",
     "Film stock, %s" to
         "Плівка, %s",
-    "Loaded stock, %s" to
-        "Завантажена плівка, %s",
     "Open" to
         "Відкрито",
     "Closed" to
@@ -729,10 +727,10 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "М’яка чорно-біла кіноплівка, відкриті тіні",
     "The film strip left of the stock picker. On (the default), the picker lists film stocks grouped by family (Colour negative, Cinema print, Slide), developed as the negative, its print and scan, with film grain and the red halation around bright lights; off, the looks on RawBoy's film LUTs. Each keeps its own pick. B&W uses only the black and white looks (with more contrast and grain while Film is on), and switching it off comes back to Film." to
         "Плівка зліва від вибору плівки. Увімкнено (типово): вибір показує плівки за групами (Кольоровий негатив, Кіноплівка, Слайд), проявлені як негатив, відбиток і скан, із зерном і червоним ореолом; вимкнено: стилі на плівкових LUT RawBoy. Кожен режим пам’ятає свій вибір. Ч/Б показує лише чорно-білі стилі (з більшим контрастом і зерном при ввімкненій «Плівці»), а вимкнення Ч/Б повертає до «Плівки».",
-    "Stock picker & top-right badge" to
-        "Вибір плівки та значок угорі праворуч",
-    "Tap the stock button under the picture (or the loaded-stock badge in the top right) to open a live stock tray along the bottom of the viewfinder with family filters and a short note per stock, leaving the frame visible while you preview." to
-        "Торкніться кнопки плівки під кадром (або значка завантаженої плівки угорі праворуч), щоб відкрити панель плівок унизу видошукача з фільтрами груп і коротким описом кожної плівки — кадр залишається видимим під час перегляду.",
+    "Stock picker" to
+        "Вибір плівки",
+    "Tap the stock button under the picture to open a live stock tray along the bottom of the viewfinder with family filters and a short note per stock, leaving the frame visible while you preview." to
+        "Торкніться кнопки плівки під кадром, щоб відкрити панель плівок унизу видошукача з фільтрами груп і коротким описом кожної плівки — кадр залишається видимим під час перегляду.",
     "Swipe the viewfinder" to
         "Жест по видошукачу",
     "Swipe left or right across the viewfinder to step through the active mode's stocks or looks without opening the tray; the loaded stock name and note appear briefly over the frame." to

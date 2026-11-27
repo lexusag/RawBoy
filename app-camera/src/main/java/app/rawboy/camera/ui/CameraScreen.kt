@@ -733,26 +733,16 @@ fun CameraScreen(
                                 .background(Color.Black.copy(alpha = blink.value)),
                         )
                     }
-                    // Top right: histogram (when on) and quiet loaded-stock badge (tap to open stock tray).
-                    Column(
-                        Modifier.align(Alignment.TopEnd).padding(8.dp),
-                        horizontalAlignment = Alignment.End,
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        if (shown.showHistogram && params != null) {
-                            HistogramView(
-                                histogram,
-                                Modifier.size(width = 120.dp, height = 48.dp),
-                                background = Color(0x99000000),
-                            )
-                        }
-                        if (!easy && !street && !stockTrayOpen && !compare) {
-                            LoadedStockBadge(
-                                name = settings.look.name,
-                                enabled = recordingMs == null,
-                                onClick = { stockTrayOpen = true },
-                            )
-                        }
+                    // Top right; the lock chips stack at the top left.
+                    if (shown.showHistogram && params != null) {
+                        HistogramView(
+                            histogram,
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp)
+                                .size(width = 120.dp, height = 48.dp),
+                            background = Color(0x99000000),
+                        )
                     }
                     // Transient HUD over the frame when swiping stocks or toggling Film/B&W.
                     AnimatedVisibility(
@@ -1526,42 +1516,6 @@ private fun StockPillButton(
                 modifier = Modifier.graphicsLayer { rotationZ = if (open) 180f else 0f },
             )
         }
-    }
-}
-
-/** Quiet corner indicator showing which stock/look is loaded; tapping opens the stock tray. */
-@Composable
-private fun LoadedStockBadge(
-    name: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    val accent = MaterialTheme.colorScheme.primary
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color(0x99000000))
-            .border(1.dp, Color(0x26FFFFFF), RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .semantics { contentDescription = tr("Loaded stock, %s", name) }
-            .padding(horizontal = 9.dp, vertical = 4.dp),
-    ) {
-        Box(
-            Modifier
-                .size(6.dp)
-                .clip(CircleShape)
-                .background(accent),
-        )
-        Text(
-            name,
-            style = MaterialTheme.typography.labelMedium,
-            color = Color.White.copy(alpha = 0.92f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.widthIn(max = 170.dp),
-        )
     }
 }
 
