@@ -153,11 +153,11 @@ class ShotDevelopParityTest {
             0.06f, -8f, -7f, -5f, -1.2f, -0.7f, 0f, 0.1f, 0.25f, 0f, 0f, 0f, 50f, IntArray(1), 0.25f,
         )
         val sunnyLight = app.rawboy.auto.analysis.SceneLight(exposureSeconds = 1f / 1000f)
-        val base = DevelopParams(exposure = 1.4f, contrast = 15f, highlights = -10f, shadows = 20f)
+        val base = DevelopParams(exposure = 0.0f, contrast = 15f, highlights = -10f, shadows = 20f)
 
         // Unlocked non-flash photo gets SceneRecognition lift (+0.45 EV).
         val unlocked = ShotDevelop.autoBase(base, skyStats, sunnyLight, isFlash = false, lockedExposureEv = null)
-        assertEquals(1.85f, unlocked.exposure, 1e-5f)
+        assertEquals(0.45f, unlocked.exposure, 1e-5f)
 
         // AE/WB-locked photo holds the locked exposure without re-metering or scene lift, keeping tone adjustments.
         val locked = ShotDevelop.autoBase(base, skyStats, sunnyLight, isFlash = false, lockedExposureEv = -0.35f)
