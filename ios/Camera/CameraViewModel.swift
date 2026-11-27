@@ -394,9 +394,9 @@ final class CameraViewModel: ObservableObject {
 
     /** The device's turn from portrait now (clockwise, 0/90/180/270), used by photo capture, video and tap metering. */
     private func currentDeviceDegrees() -> Int {
-        if let g = motion.deviceMotion?.gravity {
+        if motion.isDeviceMotionActive, let g = motion.deviceMotion?.gravity {
             orientationTracker.update(ax: g.x, ay: g.y, az: g.z)
-        } else if let a = motion.accelerometerData?.acceleration {
+        } else if motion.isAccelerometerActive, let a = motion.accelerometerData?.acceleration {
             orientationTracker.update(ax: a.x, ay: a.y, az: a.z)
         }
         if !orientationTracker.hasGravityReading {
@@ -706,6 +706,7 @@ final class CameraViewModel: ObservableObject {
             orientationObserver = nil
         }
         stopMotion()
+        orientationTracker.invalidateGravity()
     }
 
     private func seedOrientationFromSystem() {
@@ -734,8 +735,9 @@ final class CameraViewModel: ObservableObject {
 
     /**
      * Runs one CoreMotion gravity stream while active: prefers `CMDeviceMotion.gravity` (sensor-fused, immune to hand
-     * acceleration when lifting the phone) and falls back to raw accelerometer. Feeds both `orientationTracker`
-     * (photo/video orientation) and the horizon level line when `settings.showLevel` is on.
+     * acceleration when lifting the phone) and falls back to raw accelerometer if unavailable or if device motion
+     * reports an error. Feeds both `orientationTracker` (photo/video orientation) and the horizon level line when
+     * `settings.showLevel` is on.
      */
     private func startMotion() {
         if motion.isDeviceMotionAvailable {
@@ -744,19 +746,41 @@ final class CameraViewModel: ObservableObject {
                 return
             }
             motion.deviceMotionUpdateInterval = motionInterval
-            motion.startDeviceMotionUpdates(to: .main) { [weak self] data, _ in
-                guard let g = data?.gravity else { return }
-                MainActor.assumeIsolated { self?.handleGravity(x: g.x, y: g.y, z: g.z) }
+            motion.startDeviceMotionUpdates(to: .main) { [weak self] data, error in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if let error {
+                        Self.log.error("device motion: \(error.localizedDescription); falling back to accelerometer")
+                        self.motion.stopDeviceMotionUpdates()
+                        self.startAccelerometer()
+                        return
+                    }
+                    guard let g = data?.gravity else { return }
+                    self.handleGravity(x: g.x, y: g.y, z: g.z)
+                }
             }
-        } else if motion.isAccelerometerAvailable {
-            guard !motion.isAccelerometerActive else {
-                motion.accelerometerUpdateInterval = motionInterval
-                return
-            }
+        } else {
+            startAccelerometer()
+        }
+    }
+
+    private func startAccelerometer() {
+        guard active, motion.isAccelerometerAvailable else { return }
+        guard !motion.isAccelerometerActive else {
             motion.accelerometerUpdateInterval = motionInterval
-            motion.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
+            return
+        }
+        motion.accelerometerUpdateInterval = motionInterval
+        motion.startAccelerometerUpdates(to: .main) { [weak self] data, error in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if let error {
+                    Self.log.error("accelerometer: \(error.localizedDescription)")
+                    self.motion.stopAccelerometerUpdates()
+                    return
+                }
                 guard let a = data?.acceleration else { return }
-                MainActor.assumeIsolated { self?.handleGravity(x: a.x, y: a.y, z: a.z) }
+                self.handleGravity(x: a.x, y: a.y, z: a.z)
             }
         }
     }
