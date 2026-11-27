@@ -367,8 +367,8 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Запуск камери…",
     "Portrait" to
         "Портрет",
-    "Blurs the background of saved photos from a depth map (the same as Settings › Experimental › Save depth map with Generate portrait in camera; Depth from picks how the depth is found). Lit when on; the focused subject stays sharp. Saving takes a few seconds longer." to
-        "Розмиває фон збережених фото за картою глибини (те саме, що Налаштування › Експериментальне › Зберігати карту глибини з «Генерувати портрет у камері»; «Глибина з» обирає, як знайти глибину). Світиться, коли ввімкнено; предмет у фокусі лишається різким. Збереження триває на кілька секунд довше.",
+    "Blurs the background of saved photos from a depth map (toggles Settings › Experimental › Save depth map in DNG and Generate portrait in camera together; Depth from picks how the depth is found). Lit when on; the focused subject stays sharp. Saving takes a few seconds longer." to
+        "Розмиває фон збережених фото за картою глибини (перемикає разом Налаштування › Експериментальне › Зберігати карту глибини в DNG та «Генерувати портрет у камері»; «Глибина з» обирає, як знайти глибину). Світиться, коли ввімкнено; предмет у фокусі лишається різким. Збереження триває на кілька секунд довше.",
     "Done" to
         "Готово",
     "Generate portrait in camera" to

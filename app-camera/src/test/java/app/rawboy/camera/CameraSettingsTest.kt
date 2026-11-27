@@ -335,5 +335,38 @@ class CameraSettingsTest {
             assertTrue(next.startsWith("2:"))
         }
     }
-}
 
+    @Test
+    fun portraitToggleSwitchesDepthSaveAndPortraitTogether() {
+        val base = CameraSettings(depthSource = DepthSource.DUAL_PIXEL)
+        assertFalse(base.saveDepth)
+        assertFalse(base.depthPortrait)
+        assertFalse(base.portraitActive)
+
+        // Turning Portrait on enables both depth map saving and in-camera portrait blur.
+        val on = base.togglePortrait()
+        assertTrue(on.saveDepth)
+        assertTrue(on.depthPortrait)
+        assertTrue(on.portraitActive)
+        assertEquals(DepthSource.DUAL_PIXEL, on.depthSource)
+
+        // Turning Portrait off disables both so normal shots stop computing and saving depth maps.
+        val off = on.togglePortrait()
+        assertFalse(off.saveDepth)
+        assertFalse(off.depthPortrait)
+        assertFalse(off.portraitActive)
+        assertEquals(DepthSource.DUAL_PIXEL, off.depthSource)
+
+        // Partial states (only one flag set) are not portrait-active: toggling turns both on, then both off.
+        for (partial in listOf(
+            base.copy(saveDepth = true, depthPortrait = false),
+            base.copy(saveDepth = false, depthPortrait = true),
+        )) {
+            assertFalse(partial.portraitActive)
+            val enabled = partial.togglePortrait()
+            assertTrue(enabled.saveDepth && enabled.depthPortrait && enabled.portraitActive)
+            val disabled = enabled.togglePortrait()
+            assertFalse(disabled.saveDepth || disabled.depthPortrait || disabled.portraitActive)
+        }
+    }
+}

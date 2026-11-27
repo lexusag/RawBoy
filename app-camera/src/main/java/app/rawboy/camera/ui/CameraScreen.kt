@@ -318,7 +318,7 @@ fun CameraScreen(
             } else if (!videoMode) {
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
                 FrameButton(settings.photoFrame) { vm.togglePhotoFrame() }
-                PortraitButton(settings.saveDepth && settings.depthPortrait, vm::togglePortrait)
+                PortraitButton(settings.portraitActive, vm::togglePortrait)
                 BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
                 if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
             }
@@ -2284,7 +2284,7 @@ private fun RawButton(keep: Boolean, onClick: () -> Unit) {
 
 /**
  * Portrait: blur the saved JPEG's background from the depth map (Settings' Save depth map + Generate portrait in camera,
- * both switched on together). Lit while on.
+ * toggled on and off together). Lit while on.
  */
 @Composable
 private fun PortraitButton(on: Boolean, onClick: () -> Unit) {

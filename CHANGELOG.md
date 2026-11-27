@@ -1,3 +1,8 @@
+**Camera: Portrait toggle also disables depth map saving (Android, 2026-11-26)**
+
+- Turning the top-bar **Portrait** button off now switches off both **Save depth map in DNG** and **Generate portrait in camera** (`CameraSettings.togglePortrait`), instead of leaving depth map capture enabled on subsequent normal shots. Changing depth settings or toggling Portrait also syncs the camera's hardware/dual-pixel depth stream (`CameraViewModel.syncDepthStream`) when the active lens's stream changes (no restart when using AI depth).
+- Code: `CameraSettings.kt`, `CameraViewModel.kt`, `CameraScreen.kt`, `Help.kt`, `StringsUk.kt`; docs (`docs/camera.md`, `docs/features-camera.md`). Tests: `CameraSettingsTest`, `StringsTest`.
+
 **Camera: plain frame icon for the Frames toggle (iOS, 2026-11-26)**
 
 - Replaced the top-bar **Frames** toggle icon from SF Symbol `photo.artframe` (a frame with a landscape picture inside) to `rectangle.inset.filled` (a plain frame with a solid inset rectangle, matching Android's `FrameIcon`).

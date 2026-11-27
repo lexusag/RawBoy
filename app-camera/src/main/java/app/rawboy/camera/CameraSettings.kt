@@ -398,6 +398,16 @@ data class CameraSettings(
     /** Pure RAW: save only the DNG with no embedded processed preview, bypassing develop entirely. */
     val pureRaw: Boolean get() = keepDng && !rawWithJpeg && rawPreview == RawPreview.NONE
 
+    /** Whether the top bar's Portrait toggle is active (both [saveDepth] and [depthPortrait] on). */
+    val portraitActive: Boolean get() = saveDepth && depthPortrait
+
+    /**
+     * Top bar Portrait toggle: turning it on enables both [saveDepth] and [depthPortrait]; turning it off disables
+     * both so normal shots stop computing and saving depth maps.
+     */
+    fun togglePortrait(): CameraSettings =
+        if (portraitActive) copy(saveDepth = false, depthPortrait = false) else copy(saveDepth = true, depthPortrait = true)
+
     /** Resets all user settings to their defaults while keeping learned lens calibration. */
     fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides, language = language)
 
