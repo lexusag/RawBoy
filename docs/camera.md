@@ -74,7 +74,10 @@ shows them.
   `Pictures/RawBoy Camera/RAW/IMG_<date>_<time>.dng`. It is then developed in the background exactly as RawBoy Auto
   develops a raw (tone and noise from the raw itself, then the look with the controls as they were at the shutter)
   and saved as `Pictures/RawBoy Camera/IMG_<date>_<time>-camera.jpg`. The exposure is the phone's own auto exposure,
-  lifted when it darkened the frame to protect something bright (a white bird, a window); flash shots, exposed
+  lifted when it darkened the frame to protect something bright (a white bird, a window), plus Camera's **scene
+  recognition map** (`SceneRecognition`, shared by Android and iOS on both the live viewfinder and saved photos): a
+  sunny day with blue sky (bright blue-sky pixels at sunny daylight exposure levels) is brightened moderately (up to
+  +0.45 EV), smoothly blended by confidence and eased back when highlights are already near clip; flash shots, exposed
   manually on the Pixel, are metered by RawBoy (the iPhone's flash is exposed by its own AE, so it is kept too). You can keep shooting meanwhile;
   "Saving N…" shows the queue. The thumbnail opens the last photo. Exposure is metered on the middle half of the
   frame (width and height); a focus lock meters at its point instead.

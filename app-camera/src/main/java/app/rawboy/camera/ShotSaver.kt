@@ -33,6 +33,8 @@ import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.NoiseLevel
+import app.rawboy.auto.analysis.SceneLight
+import app.rawboy.auto.analysis.SceneRecognition
 import app.rawboy.develop.FilmLeaks
 import app.rawboy.develop.Masks
 import app.rawboy.export.DateStamp
@@ -99,6 +101,10 @@ internal data class Shot(
     val viewfinderKey: Float?,
     /** Sensor ISO from the capture, in case the DNG lacks it. */
     val iso: Float,
+    /** Sensor exposure time in nanoseconds from the capture result (0 = unknown, falls back to DNG EXIF). */
+    val exposureNs: Long = 0L,
+    /** Post-raw sensitivity boost multiplier from the capture result (1 = none), for scene recognition light level. */
+    val postRawBoost: Float = 1f,
     /** The camera's face detection saw a face at the shutter (or can't tell): run skin detection. */
     val mayHaveFace: Boolean = true,
     /** Flash shot: the guide it was exposed with, for calibrating [CameraSettings.flashGuides]. */
@@ -542,7 +548,11 @@ internal object ShotSaver {
                 "make ${img.make} exposure ${a.autoBase.exposure}"
             DebugProbe.dump(app, "${shot.id}-raw", a.base, rawNote)
             TuningData.saveRaw(app, shot.id, a.base, rawNote)
-            val looked = ShotDevelop.looked(s, a.autoBase, a.stats.hasFace, shot.platform)
+            val exposureSeconds = if (shot.exposureNs > 0L) shot.exposureNs / 1e9f
+            else img.shotInfo.exposureTime.takeIf { it.isFinite() && it > 0.0 }?.toFloat() ?: 0f
+            val sceneLight = SceneLight(exposureSeconds, shot.postRawBoost, shot.compensationEv)
+            val autoBase = if (shot.flashGuide == null) SceneRecognition.apply(a.autoBase, a.stats, sceneLight) else a.autoBase
+            val looked = ShotDevelop.looked(s, autoBase, a.stats.hasFace, shot.platform)
             // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
             val noise = img.measureNoise()
