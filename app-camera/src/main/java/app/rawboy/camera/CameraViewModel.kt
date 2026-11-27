@@ -380,6 +380,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _frontAvailable = MutableStateFlow(false)
     val frontAvailable = _frontAvailable.asStateFlow()
 
+    /**
+     * Back and front lens labels `(back, front)` offered by this phone for Settings › Power double-press camera.
+     * Seeded from [FastLensCache] so cold starts show all lenses immediately before background discovery finishes.
+     */
+    private val _powerLaunchLenses: MutableStateFlow<Pair<List<String>, List<String>>> = MutableStateFlow(
+        FastLensCache.loadAll(application, maxRes = false).let { cached ->
+            cached[false].orEmpty().map { it.label } to cached[true].orEmpty().map { it.label }
+        },
+    )
+    val powerLaunchLenses = _powerLaunchLenses.asStateFlow()
+
+    private fun publishAvailablePowerLenses(sides: Map<Boolean, List<CameraController.Info>>) {
+        _powerLaunchLenses.value = sides[false].orEmpty().map { it.label } to sides[true].orEmpty().map { it.label }
+    }
+
     /** Whether the current lens has a flash (the flash button shows only then). */
     private val _flashAvailable = MutableStateFlow(false)
     val flashAvailable = _flashAvailable.asStateFlow()
@@ -964,6 +979,74 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** True once a camera has opened in this ViewModel instance (distinguishes cold vs warm power launches). */
+    private var hasOpenedCamera = false
+
+    /**
+     * Applies [CameraSettings.powerLaunchCamera] when RawBoy Camera is opened via a power-button double press
+     * (`STILL_IMAGE_CAMERA` / `STILL_IMAGE_CAMERA_SECURE`): defaults to back `W`, opens the user's selected camera/lens,
+     * or keeps/restores the last opened camera. Called before [prewarm] so cold starts fast-open the right lens.
+     */
+    fun applyPowerLaunchCamera() {
+        val choice = _settings.value.powerLaunchCamera
+        if (choice is PowerLaunchCamera.Last) {
+            // Cold start: restore the last opened camera even if `rememberLast` is off. Warm starts keep the active lens.
+            if (!hasOpenedCamera) {
+                val (lastFront, lastLens) = CameraSettingsStore.lastCamera(app)
+                if (_settings.value.front != lastFront || _settings.value.lens != lastLens) {
+                    _settings.value = _settings.value.copy(front = lastFront, lens = lastLens)
+                }
+            }
+            return
+        }
+        val target = choice as PowerLaunchCamera.Lens
+        if (_settings.value.front != target.front || _settings.value.lens != target.lens) {
+            _settings.value = _settings.value.copy(front = target.front, lens = target.lens)
+        }
+        val currentInfo = info
+        if (currentInfo != null && currentInfo.isFront == target.front && currentInfo.label == target.lens) return
+        val sides = lensesBySide
+        if (sides != null) {
+            val effectiveFront = target.front && sides[true].orEmpty().isNotEmpty()
+            val all = sides[effectiveFront].orEmpty()
+            val resolved = all.firstOrNull { it.label == target.lens }
+                ?: all.firstOrNull { it.label == "W" }
+                ?: all.firstOrNull()
+            if (resolved != null) {
+                if (_settings.value.front != resolved.isFront || _settings.value.lens != resolved.label) {
+                    _settings.value = _settings.value.copy(front = resolved.isFront, lens = resolved.label)
+                }
+                _lenses.value = all
+                if (resolved !== currentInfo) {
+                    info = resolved
+                    publishLensCapabilities(resolved)
+                    setExposureLock(false)
+                    stopTracking(clearPoint = true)
+                    _dragPoint.value = null
+                    live = null
+                    clearQr()
+                    _shaderParams.value = null
+                    if (resumed && surfaceTexture != null) {
+                        if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+                    }
+                }
+                return
+            }
+        }
+        if (currentInfo != null) {
+            info = null
+            setExposureLock(false)
+            stopTracking(clearPoint = true)
+            _dragPoint.value = null
+            live = null
+            clearQr()
+            _shaderParams.value = null
+            if (resumed && surfaceTexture != null) {
+                if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+            }
+        }
+    }
+
     private fun applyStreetTransition(prev: CameraSettings, next: CameraSettings, nowActive: Boolean) {
         if (nowActive) {
             if (_videoMode.value && _recordingMs.value == null) _videoMode.value = false
@@ -980,17 +1063,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         syncSnapFocus()
         preloadActiveLook()
         republish()
+        if (prev.maxRes != next.maxRes) {
+            lensesBySide = null
+            lensPrefetch = null
+            info = null
+            live = null
+            _shaderParams.value = null
+        }
         val needsRestart = prev.maxRes != next.maxRes ||
             prev.rawViewfinder != next.rawViewfinder ||
             (prev.saveDepth != next.saveDepth || prev.depthSource != next.depthSource)
         if (needsRestart && surfaceTexture != null && _status.value == CameraStatus.READY) {
-            if (prev.maxRes != next.maxRes) {
-                lensesBySide = null
-                lensPrefetch = null
-                info = null
-                live = null
-                _shaderParams.value = null
-            }
             if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
         }
     }
@@ -1147,8 +1230,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     mirror = inf.isFront,
                 )
                 _status.value = CameraStatus.READY
+                hasOpenedCamera = true
                 StartupTrace.mark("cameraReady", "${inf.label} cached=${usedFastCache != null}")
-                if (inf.label != _settings.value.lens) change { it.copy(lens = inf.label) }
+                if (inf.isFront != _settings.value.front || inf.label != _settings.value.lens) {
+                    _settings.value = _settings.value.copy(front = inf.isFront, lens = inf.label)
+                }
+                CameraSettingsStore.saveLastCamera(app, inf.isFront, inf.label)
                 // If the user pressed shutter / volume while the camera was opening, fire once the first frame arrives.
                 if (queuedShutterAt != 0L) {
                     withTimeoutOrNull(EARLY_SHUTTER_FRAME_WAIT_MS) { controller.frames.first { it != null } }
@@ -1183,6 +1270,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             FastLensCache.saveAll(app, it, maxRes)
             StartupTrace.mark("lensDiscoveryDone", "sync")
         }
+        publishAvailablePowerLenses(sides)
         _frontAvailable.value = sides[true].orEmpty().isNotEmpty()
         if (sides[false].orEmpty().isEmpty()) throw java.io.IOException("No back camera with RAW support")
         // The saved side may have no RAW (or another phone): fall back to the back cameras.
@@ -1192,7 +1280,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _maxResMp.value = sides.values.flatten().mapNotNull { it.maxResSize }
             .maxOfOrNull { Math.round(it.width.toLong() * it.height / 1e6f) } ?: 0
         if (front != _settings.value.front) change { it.copy(front = front) }
-        return (all.firstOrNull { it.label == _settings.value.lens } ?: all.first { it.label == "W" }).also { info = it }
+        return (all.firstOrNull { it.label == _settings.value.lens } ?: all.firstOrNull { it.label == "W" } ?: all.first()).also { info = it }
     }
 
     private fun publishLensCapabilities(inf: CameraController.Info) {
@@ -1218,6 +1306,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             withContext(Dispatchers.Main) {
                 if (current.maxRes != maxRes) return@withContext
                 lensesBySide = sides
+                publishAvailablePowerLenses(sides)
                 _frontAvailable.value = sides[true].orEmpty().isNotEmpty()
                 val all = sides[opened.isFront].orEmpty()
                 if (all.isNotEmpty()) _lenses.value = all
@@ -1847,6 +1936,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Double-pressing the power button launches RawBoy Camera directly in Street mode. */
     fun setStreetOnPowerLaunch(on: Boolean) = change { it.copy(streetOnPowerLaunch = on) }
+
+    /** Which camera opens on a power-button double press: back `W` by default, another selected camera, or last opened. */
+    fun setPowerLaunchCamera(camera: PowerLaunchCamera) = change { it.copy(powerLaunchCamera = camera) }
 
     /** Street mode's Colour / B&W switch (Easy-mode default film / mono stocks). */
     fun setStreetMono(on: Boolean) {

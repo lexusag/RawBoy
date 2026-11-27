@@ -161,6 +161,7 @@ class CameraActivity : ComponentActivity() {
                 powerLaunch && viewModel.settings.value.streetOnPowerLaunch -> viewModel.setStreetSession(true)
                 else -> viewModel.setStreetSession(false)
             }
+            if (powerLaunch) viewModel.applyPowerLaunchCamera()
         }
         val source = when {
             streetShortcut -> "street-shortcut"

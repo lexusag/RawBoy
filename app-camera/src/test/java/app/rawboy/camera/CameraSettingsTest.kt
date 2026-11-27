@@ -369,4 +369,60 @@ class CameraSettingsTest {
             assertFalse(disabled.saveDepth || disabled.depthPortrait || disabled.portraitActive)
         }
     }
+
+    @Test
+    fun powerLaunchCameraDefaultsToBackWideAndRoundTrips() {
+        val defaults = CameraSettings()
+        assertEquals(PowerLaunchCamera.Lens(front = false, lens = "W"), defaults.powerLaunchCamera)
+        assertEquals(PowerLaunchCamera.DEFAULT, defaults.powerLaunchCamera)
+
+        val cases = listOf(
+            PowerLaunchCamera.Last to "LAST",
+            PowerLaunchCamera.Lens(front = false, lens = "UW") to "B:UW",
+            PowerLaunchCamera.Lens(front = false, lens = "W") to "B:W",
+            PowerLaunchCamera.Lens(front = false, lens = "T2") to "B:T2",
+            PowerLaunchCamera.Lens(front = true, lens = "W") to "F:W",
+        )
+        for ((value, encoded) in cases) {
+            assertEquals(encoded, value.serialize())
+            assertEquals(value, PowerLaunchCamera.parse(encoded))
+        }
+
+        // Null, empty, or malformed values fall back safely to back W.
+        for (bad in listOf(null, "", "W", "X:W", "B:", "F:", "B")) {
+            assertEquals(PowerLaunchCamera.DEFAULT, PowerLaunchCamera.parse(bad))
+        }
+
+        // Resolution picks last camera for Last and the configured camera for Lens.
+        assertEquals(true to "W", PowerLaunchCamera.resolve(PowerLaunchCamera.Last, lastFront = true, lastLens = "W"))
+        assertEquals(false to "T", PowerLaunchCamera.resolve(PowerLaunchCamera.Last, lastFront = false, lastLens = "T"))
+        assertEquals(false to "W", PowerLaunchCamera.resolve(PowerLaunchCamera.DEFAULT, lastFront = true, lastLens = "W"))
+        assertEquals(false to "UW", PowerLaunchCamera.resolve(PowerLaunchCamera.Lens(false, "UW"), lastFront = false, lastLens = "T"))
+
+        // Option list lists back lenses widest-first, then front lenses, and keeps the selected lens visible before discovery.
+        assertEquals(
+            listOf(
+                PowerLaunchCamera.Lens(false, "UW"),
+                PowerLaunchCamera.Lens(false, "W"),
+                PowerLaunchCamera.Lens(false, "T"),
+                PowerLaunchCamera.Lens(true, "W"),
+            ),
+            PowerLaunchCamera.optionsFor(listOf("UW", "W", "T"), listOf("W"), PowerLaunchCamera.DEFAULT),
+        )
+        assertEquals(
+            listOf(PowerLaunchCamera.Lens(false, "W"), PowerLaunchCamera.Lens(false, "T")),
+            PowerLaunchCamera.optionsFor(emptyList(), emptyList(), PowerLaunchCamera.Lens(false, "T")),
+        )
+
+        // Resetting settings returns powerLaunchCamera to back W.
+        assertEquals(
+            PowerLaunchCamera.DEFAULT,
+            defaults.copy(powerLaunchCamera = PowerLaunchCamera.Last).resetToDefaults().powerLaunchCamera,
+        )
+        assertEquals(
+            PowerLaunchCamera.DEFAULT,
+            defaults.copy(powerLaunchCamera = PowerLaunchCamera.Lens(true, "W")).resetToDefaults().powerLaunchCamera,
+        )
+    }
 }
+

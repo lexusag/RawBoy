@@ -595,6 +595,20 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Подвійне натискання живлення відкриває вуличний режим",
     "Double-pressing the power button launches straight into Street mode" to
         "Подвійне натискання кнопки живлення одразу запускає вуличний режим",
+    "Power double-press camera" to
+        "Камера на подвійне натискання",
+    "Which camera opens on a power-button double press" to
+        "Яка камера відкривається подвійним натисканням живлення",
+    "Selected camera" to
+        "Вибрана камера",
+    "Last opened" to
+        "Остання відкрита",
+    "Camera" to
+        "Камера",
+    "Selfie" to
+        "Селфі",
+    "Selfie %s" to
+        "Селфі %s",
     "Snap focus" to
         "Зонний фокус (Snap Focus)",
     "Fixed zone focus distance for 0 ms focus lag; AF uses continuous autofocus" to
@@ -623,8 +637,8 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Сітка 3 × 3 поверх видошукача",
     "Horizon line over the viewfinder" to
         "Лінія горизонту поверх видошукача",
-    "Double-press the power button (with RawBoy Camera as the default camera), use the Street shortcut or Quick Settings tile, or turn on Settings › Street mode. Starts momentarily with Easy mode's Colour or B&W look, Snap Focus (AF, 1.5m, 2.5m, 5m or ∞ for zero focus lag), minimum shutter speed floor, single-frame ZSL and an oversized shutter. Tap the amber STREET badge to switch to the full camera." to
-        "Двічі натисніть кнопку живлення (якщо RawBoy Camera — камера за замовчуванням), скористайтеся ярликом «Вулиця», плиткою швидких налаштувань або увімкніть Налаштування › Вуличний режим. Запускається миттєво з виглядом Колір або Ч/Б, зонним фокусом Snap Focus (AF, 1.5m, 2.5m, 5m або ∞ без затримки фокусування), мінімальною витримкою, миттєвим ZSL-кадром і великою кнопкою затвора. Торкніться бурштинового значка ВУЛИЦЯ, щоб перейти до повної камери.",
+    "Double-press the power button (with RawBoy Camera as the default camera), use the Street shortcut or Quick Settings tile, or turn on Settings › Street mode. Opens the W camera by default on a power double-press (change to Last opened or another lens in Settings › Power double-press camera). Starts momentarily with Easy mode's Colour or B&W look, Snap Focus (AF, 1.5m, 2.5m, 5m or ∞ for zero focus lag), minimum shutter speed floor, single-frame ZSL and an oversized shutter. Tap the amber STREET badge to switch to the full camera." to
+        "Двічі натисніть кнопку живлення (якщо RawBoy Camera — камера за замовчуванням), скористайтеся ярликом «Вулиця», плиткою швидких налаштувань або увімкніть Налаштування › Вуличний режим. За подвійним натисканням живлення типово відкривається камера W (можна змінити на «Остання відкрита» або інший об’єктив у Налаштування › Камера на подвійне натискання). Запускається миттєво з виглядом Колір або Ч/Б, зонним фокусом Snap Focus (AF, 1.5m, 2.5m, 5m або ∞ без затримки фокусування), мінімальною витримкою, миттєвим ZSL-кадром і великою кнопкою затвора. Торкніться бурштинового значка ВУЛИЦЯ, щоб перейти до повної камери.",
     "Next stock" to
         "Наступна плівка",
     "Previous stock" to
