@@ -240,7 +240,7 @@ struct CameraScreen: View {
                 // The picture, taps, focus ring and loupe in the upright picture's coordinates, turned with it.
                 Turned(turns: turns) {
                     ZStack {
-                        Viewfinder(renderer: vm.renderer)
+                        Viewfinder(renderer: vm.renderer, paused: showSettings)
                         GeometryReader { geo in
                             Color.clear.contentShape(Rectangle())
                                 // Tap: dismiss the stock tray if open, else focus lock at that point.

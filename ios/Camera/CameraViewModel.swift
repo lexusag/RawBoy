@@ -171,6 +171,7 @@ final class CameraViewModel: ObservableObject {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         seedOrientationFromSystem()
         controller.onFrame = { [renderer, subject] buffer, time in
+            guard !renderer.isRenderingPaused else { return }
             renderer.enqueue(buffer, time: time)
             let frame = renderer.frame
             subject.feed(buffer, rotation: frame?.rotation ?? CameraController.viewfinderRotation,

@@ -1,6 +1,7 @@
 package app.rawboy.gl
 
 import android.graphics.SurfaceTexture
+import android.opengl.EGL14
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.opengl.GLSurfaceView
@@ -9,6 +10,7 @@ import android.util.Log
 import app.rawboy.session.PhotoSession
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.atomic.AtomicBoolean
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
@@ -42,6 +44,8 @@ class ViewfinderRenderer(
      * its own metadata.
      */
     private val onBase: (width: Int, height: Int, rgba: FloatArray, frameNs: Long) -> Unit,
+    /** Runs a lightweight action on the GL thread without triggering a draw/swap (GLSurfaceView.queueEvent). */
+    private val queueGlEvent: ((() -> Unit) -> Unit)? = null,
 ) : GLSurfaceView.Renderer {
 
     /** How camera buffers map to the upright image. */
@@ -126,7 +130,31 @@ class ViewfinderRenderer(
         set(value) {
             value?.requestRender = requestRender
             field = value
+            syncRawPaused()
         }
+
+    /**
+     * While true (e.g. Settings is open), stops rendering viewfinder frames when no video recording is active:
+     * incoming camera buffers are still drained on the GL thread so Camera2's queue never stalls, and GPU passes /
+     * readbacks are skipped. Resuming requests a fresh draw at once.
+     */
+    @Volatile
+    var paused: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            syncRawPaused()
+            if (!value) requestRender()
+        }
+
+    /** True when viewfinder rendering is suppressed (paused and not actively recording video). */
+    val isRenderingPaused: Boolean get() = paused && videoSink == null
+
+    private val drainQueued = AtomicBoolean(false)
+
+    private fun syncRawPaused() {
+        rawFrames?.paused = isRenderingPaused
+    }
 
     /** Grain moves with the frame counter on the screen too (video mode, so the viewfinder grain looks as the file's). */
     @Volatile
@@ -159,8 +187,11 @@ class ViewfinderRenderer(
      */
     var rawFrames: RawPreviewFrames? = null
         set(value) {
-            value?.onFrame = requestRender
+            field?.onFrame = null
+            field?.paused = false
+            value?.onFrame = { if (!isRenderingPaused) requestRender() }
             field = value
+            syncRawPaused()
         }
     /** When true, the instant frame-0 passthrough preview renders in monochrome (e.g. Street/Easy B&W mode) until full develop params arrive. */
     @Volatile
@@ -278,9 +309,11 @@ class ViewfinderRenderer(
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
         GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
         surfaceTexture?.release()
+        drainQueued.set(false)
         val st = SurfaceTexture(cameraTexture)
-        st.setOnFrameAvailableListener { requestRender() }
+        st.setOnFrameAvailableListener { onCameraFrameAvailable() }
         surfaceTexture = st
+        syncRawPaused()
         GLES30.glDisable(GLES30.GL_BLEND)
         onSurfaceTexture(st)
         val yuv = GLES30.glGetString(GLES30.GL_EXTENSIONS)?.contains("GL_EXT_YUV_target") == true
@@ -307,6 +340,24 @@ class ViewfinderRenderer(
         onSurfaceReady?.invoke(SystemClock.uptimeMillis() - startedMs, hits, misses)
     }
 
+    private fun onCameraFrameAvailable() {
+        if (isRenderingPaused) {
+            val queue = queueGlEvent ?: return
+            if (drainQueued.compareAndSet(false, true)) {
+                queue {
+                    drainQueued.set(false)
+                    // Consume the queued buffer on the GL thread so Camera2's BufferQueue never stalls,
+                    // without running onDrawFrame or eglSwapBuffers.
+                    if (EGL14.eglGetCurrentContext() != EGL14.EGL_NO_CONTEXT) {
+                        surfaceTexture?.updateTexImage()
+                    }
+                }
+            }
+            return
+        }
+        requestRender()
+    }
+
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         viewWidth = width.coerceAtLeast(1)
         viewHeight = height.coerceAtLeast(1)
@@ -314,6 +365,22 @@ class ViewfinderRenderer(
 
     override fun onDrawFrame(gl: GL10?) {
         val st = surfaceTexture ?: return
+        val sink = videoSink
+        if (paused && (sink == null || sink.closing)) {
+            if (encoder != null || sink != null) {
+                encoder?.release()
+                encoder = null
+                encoderFor?.released = true
+                encoderFor = null
+                sink?.released = true
+            }
+            st.updateTexImage()
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, viewWidth, viewHeight)
+            GLES30.glClearColor(0f, 0f, 0f, 1f)
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+            return
+        }
         drops.begin()
         st.updateTexImage()
         st.getTransformMatrix(texMatrix)
@@ -984,6 +1051,8 @@ class ViewfinderRenderer(
     /** Stops delivering frames; call when the camera closes. */
     fun release() {
         surfaceTexture?.setOnFrameAvailableListener(null)
+        rawFrames?.onFrame = null
+        rawFrames?.paused = false
     }
 
     /** A half-float colour target (RGBA8 with [bytes]); row 0 = top of the image. */

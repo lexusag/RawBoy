@@ -73,4 +73,44 @@ final class ViewfinderTests: XCTestCase {
         print("viewfinder base \(b.width)x\(b.height): mean luminance \(mean), expected \(expected * Double(scale))")
         XCTAssertEqual(mean, expected * Double(scale), accuracy: expected * Double(scale) * 0.02)
     }
+
+    func testPausedSkipsRenderAndPausesView() throws {
+        var buffer: CVPixelBuffer?
+        CVPixelBufferCreate(nil, 16, 16, kCVPixelFormatType_32BGRA,
+                            [kCVPixelBufferMetalCompatibilityKey: true, kCVPixelBufferIOSurfacePropertiesKey: [:]] as CFDictionary,
+                            &buffer)
+        let pb = try XCTUnwrap(buffer)
+
+        let renderer = ViewfinderRenderer()
+        renderer.frame = ViewfinderRenderer.Frame(fullWidth: 4032, fullHeight: 3024, scale: 1)
+        var baseCalls = 0
+        renderer.onBase = { _ in baseCalls += 1 }
+
+        let view = MTKView(frame: CGRect(x: 0, y: 0, width: 100, height: 100))
+        renderer.attach(view)
+        XCTAssertFalse(view.isPaused)
+
+        renderer.paused = true
+        XCTAssertTrue(view.isPaused)
+        XCTAssertTrue(renderer.isRenderingPaused)
+
+        renderer.enqueue(pb)
+        renderer.draw(in: view)
+        XCTAssertEqual(baseCalls, 0)
+
+        // While recording video, pausing screen render still keeps the view unpaused for video encoding.
+        let sink = VideoSink(width: 64, height: 64)
+        renderer.videoSink = sink
+        XCTAssertFalse(view.isPaused)
+        XCTAssertFalse(renderer.isRenderingPaused)
+
+        // Ending video while still paused pauses the view again.
+        renderer.videoSink = nil
+        XCTAssertTrue(view.isPaused)
+        XCTAssertTrue(renderer.isRenderingPaused)
+
+        renderer.paused = false
+        XCTAssertFalse(view.isPaused)
+        XCTAssertFalse(renderer.isRenderingPaused)
+    }
 }
