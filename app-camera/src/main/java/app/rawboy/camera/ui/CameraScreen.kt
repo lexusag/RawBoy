@@ -467,14 +467,7 @@ fun CameraScreen(
                             .padding(horizontal = 4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text(
-                            statusText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(start = 12.dp),
-                        )
+                        Spacer(Modifier.weight(1f))
                         barButtons()
                     }
                 }
@@ -746,12 +739,30 @@ fun CameraScreen(
                     }
                     // Transient HUD over the frame when swiping stocks or toggling Film/B&W.
                     AnimatedVisibility(
-                        visible = stockHudVisible && !easy && !street && !stockTrayOpen && !compare,
+                        visible = stockHudVisible && !easy && !street && !stockTrayOpen && !compare && (landscape || statusText.isEmpty()),
                         enter = fadeIn(tween(120)),
                         exit = fadeOut(tween(260)),
                         modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp, start = 24.dp, end = 24.dp),
                     ) {
                         StockSwitchHud(settings.look)
+                    }
+                    // Portrait capture/recording/merging status as a single-line pill over the viewfinder: keeping it
+                    // out of the top toolbar row prevents long localized strings from wrapping vertically beside the
+                    // toolbar buttons and collapsing the viewfinder height.
+                    if (!landscape && statusText.isNotEmpty()) {
+                        Text(
+                            statusText,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 8.dp, start = 12.dp, end = 12.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xCC000000))
+                                .padding(horizontal = 12.dp, vertical = 5.dp),
+                        )
                     }
                     // Non-blocking bottom-docked stock tray: keeps the upper viewfinder live while auditioning stocks.
                     AnimatedVisibility(
@@ -2985,6 +2996,7 @@ private fun LandscapeControls(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.height(16.dp),
         )
         lookRow()

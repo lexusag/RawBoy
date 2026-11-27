@@ -63,6 +63,15 @@ internal object MaxResDngWriter {
             }
     }
 
+    private class HeaderPlan(
+        val header: ByteArray,
+        val rowsPerStrip: Int,
+        val cfa: ByteArray,
+        val blackFloat: FloatArray,
+        val whiteLevel: Int,
+        val wb: FloatArray,
+    )
+
     fun write(
         characteristics: CameraCharacteristics,
         result: CaptureResult,
@@ -74,7 +83,73 @@ internal object MaxResDngWriter {
     ) {
         val width = image.width
         val height = image.height
-        val pre = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        val plan = buildHeaderPlan(
+            characteristics = characteristics,
+            result = result,
+            width = width,
+            height = height,
+            maxResolution = true,
+            exifOrientation = exifOrientation,
+            location = location,
+            description = description,
+        )
+        out.write(plan.header)
+        val caps = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0)
+        val hasUltraHighResCap = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_ULTRA_HIGH_RESOLUTION_SENSOR in caps
+        val avgBlack = 0.25f * (plan.blackFloat[0] + plan.blackFloat[1] + plan.blackFloat[2] + plan.blackFloat[3])
+        val whiteRange = max(1f, plan.whiteLevel - avgBlack)
+        val quad = isQuadBayer(width, height, whiteRange, hasUltraHighResCap, imageRowSource(image))
+        if (quad) {
+            val t0 = SystemClock.elapsedRealtime()
+            writeRemosaicedPixels(width, height, plan.rowsPerStrip, plan.cfa, plan.blackFloat, plan.whiteLevel, plan.wb, out) { imageRowSource(image) }
+            Log.d("RawBoyCamera", "Quad-Bayer remosaic + DNG pixels (${width}x$height): ${SystemClock.elapsedRealtime() - t0} ms")
+        } else {
+            writePixels(image, width, height, plan.rowsPerStrip, out)
+        }
+    }
+
+    /**
+     * Writes an uncompressed 16-bit Bayer DNG 1.4 file from a tightly-packed little-endian 16-bit [buffer]
+     * (`width * height * 2` bytes). Used as a fallback when Android's [android.hardware.camera2.DngCreator] rejects a
+     * camera's metadata (e.g. missing `SENSOR_REFERENCE_ILLUMINANT1` on OnePlus 11 front camera).
+     */
+    fun writeBuffer(
+        characteristics: CameraCharacteristics,
+        result: CaptureResult,
+        width: Int,
+        height: Int,
+        buffer: ByteBuffer,
+        exifOrientation: Int,
+        location: Location?,
+        description: String,
+        out: OutputStream,
+    ) {
+        val plan = buildHeaderPlan(
+            characteristics = characteristics,
+            result = result,
+            width = width,
+            height = height,
+            maxResolution = false,
+            exifOrientation = exifOrientation,
+            location = location,
+            description = description,
+        )
+        out.write(plan.header)
+        writeBufferPixels(buffer, width, height, plan.rowsPerStrip, out)
+    }
+
+    private fun buildHeaderPlan(
+        characteristics: CameraCharacteristics,
+        result: CaptureResult,
+        width: Int,
+        height: Int,
+        maxResolution: Boolean,
+        exifOrientation: Int,
+        location: Location?,
+        description: String,
+    ): HeaderPlan {
+        val pre = (if (maxResolution && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             characteristics.get(CameraCharacteristics.SENSOR_INFO_PRE_CORRECTION_ACTIVE_ARRAY_SIZE_MAXIMUM_RESOLUTION)
                 ?: characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE_MAXIMUM_RESOLUTION)
         } else null)
@@ -82,10 +157,15 @@ internal object MaxResDngWriter {
             ?: characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
             ?: Rect(0, 0, width, height)
 
-        val preW = pre.width().takeIf { it > 0 } ?: width
-        val preH = pre.height().takeIf { it > 0 } ?: height
-        val xMin = if (width == preW && height == preH) 0 else pre.left
-        val yMin = if (width == preW && height == preH) 0 else pre.top
+        val rawPreW = pre.width()
+        val rawPreH = pre.height()
+        val usePre = rawPreW in 1..width && rawPreH in 1..height &&
+            pre.left >= 0 && pre.top >= 0 &&
+            pre.left + rawPreW <= width && pre.top + rawPreH <= height
+        val preW = if (usePre) rawPreW else width
+        val preH = if (usePre) rawPreH else height
+        val xMin = if (!usePre || (width == preW && height == preH)) 0 else pre.left
+        val yMin = if (!usePre || (width == preW && height == preH)) 0 else pre.top
 
         val cfaEnum = characteristics.get(CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT)
             ?: CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT_RGGB
@@ -179,12 +259,16 @@ internal object MaxResDngWriter {
         entries += longs(50719, intArrayOf(cropMargin, cropMargin))             // DefaultCropOrigin
         entries += longs(50720, intArrayOf(preW - cropMargin * 2, preH - cropMargin * 2)) // DefaultCropSize
 
-        val ill1 = characteristics.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1)
-        val ill2 = characteristics.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT2)?.toInt()?.and(0xFF)
-        characteristics.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1)?.let { entries += matrix(50721, it) }
-        if (ill2 != null) characteristics.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2)?.let { entries += matrix(50722, it) }
-        characteristics.get(CameraCharacteristics.SENSOR_CALIBRATION_TRANSFORM1)?.let { entries += matrix(50723, it) }
-        if (ill2 != null) characteristics.get(CameraCharacteristics.SENSOR_CALIBRATION_TRANSFORM2)?.let { entries += matrix(50724, it) }
+        entries += colorProfileEntries(
+            ill1 = characteristics.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT1),
+            ill2 = characteristics.get(CameraCharacteristics.SENSOR_REFERENCE_ILLUMINANT2)?.toInt()?.and(0xFF),
+            cm1 = characteristics.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM1)?.let(::matrixPairs),
+            cm2 = characteristics.get(CameraCharacteristics.SENSOR_COLOR_TRANSFORM2)?.let(::matrixPairs),
+            cal1 = characteristics.get(CameraCharacteristics.SENSOR_CALIBRATION_TRANSFORM1)?.let(::matrixPairs),
+            cal2 = characteristics.get(CameraCharacteristics.SENSOR_CALIBRATION_TRANSFORM2)?.let(::matrixPairs),
+            fm1 = characteristics.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX1)?.let(::matrixPairs),
+            fm2 = characteristics.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX2)?.let(::matrixPairs),
+        )
         entries += rationals(
             50728,
             neutral[0].numerator.toLong().coerceAtLeast(1L) to neutral[0].denominator.toLong().coerceAtLeast(1L),
@@ -192,34 +276,63 @@ internal object MaxResDngWriter {
             neutral[2].numerator.toLong().coerceAtLeast(1L) to neutral[2].denominator.toLong().coerceAtLeast(1L),
         )
         entries += srationals(50730, (baselineEv * 100.0).roundToInt() to 100)  // BaselineExposure
-        if (ill1 != null) entries += short(50778, ill1 and 0xFF)                // CalibrationIlluminant1
-        if (ill2 != null) entries += short(50779, ill2)                         // CalibrationIlluminant2
         entries += longs(50829, intArrayOf(yMin, xMin, yMin + preH, xMin + preW)) // ActiveArea
-        characteristics.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX1)?.let { entries += matrix(50964, it) }
-        if (ill2 != null) characteristics.get(CameraCharacteristics.SENSOR_FORWARD_MATRIX2)?.let { entries += matrix(50965, it) }
 
         buildOpcodeList2(result, cfaEnum, preW, preH)?.let { entries += undefined(51009, it) }
-        buildOpcodeList3(characteristics, result, preW, preH, xMin, yMin)?.let { entries += undefined(51022, it) }
+        buildOpcodeList3(characteristics, result, preW, preH, xMin, yMin, maxResolution)?.let { entries += undefined(51022, it) }
         buildNoiseProfile(result, cfa)?.let { entries += doubles(51041, it) }
 
         val gpsEntries = location?.let(::gpsIfdEntries)
         val gpsPointer = if (gpsEntries != null) long(34853, 0).also { entries += it } else null
 
         val header = serializeHeader(entries, gpsEntries, gpsPointer, stripOffsetsEntry, stripByteCounts)
-        out.write(header)
-        val caps = characteristics.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0)
-        val hasUltraHighResCap = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_ULTRA_HIGH_RESOLUTION_SENSOR in caps
-        val avgBlack = 0.25f * (blackFloat[0] + blackFloat[1] + blackFloat[2] + blackFloat[3])
-        val whiteRange = max(1f, whiteLevel - avgBlack)
-        val quad = isQuadBayer(width, height, whiteRange, hasUltraHighResCap, imageRowSource(image))
-        if (quad) {
-            val t0 = SystemClock.elapsedRealtime()
-            writeRemosaicedPixels(width, height, rowsPerStrip, cfa, blackFloat, whiteLevel, wb, out) { imageRowSource(image) }
-            Log.d("RawBoyCamera", "Quad-Bayer remosaic + DNG pixels (${width}x$height): ${SystemClock.elapsedRealtime() - t0} ms")
-        } else {
-            writePixels(image, width, height, rowsPerStrip, out)
+        return HeaderPlan(header, rowsPerStrip, cfa, blackFloat, whiteLevel, wb)
+    }
+
+    /** Fallback sRGB D65 XYZ -> linear sRGB matrix (x10000) when a camera omits both ColorMatrix1 and ColorMatrix2. */
+    private val SRGB_FROM_XYZ_D65 = arrayOf(
+        32406 to 10000, -15372 to 10000, -4986 to 10000,
+        -9689 to 10000, 18758 to 10000, 415 to 10000,
+        557 to 10000, -2040 to 10000, 10570 to 10000,
+    )
+
+    internal fun colorProfileEntries(
+        ill1: Int?,
+        ill2: Int?,
+        cm1: Array<Pair<Int, Int>>?,
+        cm2: Array<Pair<Int, Int>>?,
+        cal1: Array<Pair<Int, Int>>?,
+        cal2: Array<Pair<Int, Int>>?,
+        fm1: Array<Pair<Int, Int>>?,
+        fm2: Array<Pair<Int, Int>>?,
+    ): List<Entry> {
+        val out = ArrayList<Entry>(8)
+        val d65 = CameraMetadata.SENSOR_REFERENCE_ILLUMINANT1_D65
+        when {
+            cm1 != null -> {
+                out += srationals(50721, *cm1)                                  // ColorMatrix1
+                cal1?.let { out += srationals(50723, *it) }                     // CameraCalibration1
+                out += short(50778, (ill1 ?: d65) and 0xFF)                     // CalibrationIlluminant1
+                fm1?.let { out += srationals(50964, *it) }                      // ForwardMatrix1
+                if (ill2 != null && cm2 != null) {
+                    out += srationals(50722, *cm2)                              // ColorMatrix2
+                    cal2?.let { out += srationals(50724, *it) }                 // CameraCalibration2
+                    out += short(50779, ill2 and 0xFF)                          // CalibrationIlluminant2
+                    fm2?.let { out += srationals(50965, *it) }                  // ForwardMatrix2
+                }
+            }
+            cm2 != null -> {
+                out += srationals(50721, *cm2)                                  // ColorMatrix1
+                cal2?.let { out += srationals(50723, *it) }                     // CameraCalibration1
+                out += short(50778, (ill2 ?: d65) and 0xFF)                     // CalibrationIlluminant1
+                fm2?.let { out += srationals(50964, *it) }                      // ForwardMatrix1
+            }
+            else -> {
+                out += srationals(50721, *SRGB_FROM_XYZ_D65)                    // ColorMatrix1
+                out += short(50778, (ill1 ?: d65) and 0xFF)                     // CalibrationIlluminant1
+            }
         }
+        return out
     }
 
     internal fun serializeHeader(
@@ -283,6 +396,20 @@ internal object MaxResDngWriter {
             p += 12
         }
         buf.putInt(p, 0)
+    }
+
+    internal fun writeBufferPixels(buffer: ByteBuffer, width: Int, height: Int, rowsPerStrip: Int, out: OutputStream) {
+        val src = buffer.duplicate()
+        val rowBytes = width * 2
+        val stripBuf = ByteArray(rowsPerStrip * rowBytes)
+        var y = 0
+        while (y < height) {
+            val rows = minOf(rowsPerStrip, height - y)
+            val bytes = rows * rowBytes
+            src.get(stripBuf, 0, bytes)
+            out.write(stripBuf, 0, bytes)
+            y += rows
+        }
     }
 
     private fun writePixels(image: Image, width: Int, height: Int, rowsPerStrip: Int, out: OutputStream) {
@@ -884,20 +1011,26 @@ internal object MaxResDngWriter {
         preH: Int,
         xMin: Int,
         yMin: Int,
+        maxResolution: Boolean,
     ): ByteArray? {
         if (preW <= 1 || preH <= 1) return null
         // Prefer the capture result's per-frame calibration if its optical centre is in this mode's array; some HALs
         // report the binned mode's cx/cy even on a maximum-resolution capture, in which case use the static max-res tag.
-        val resIntr = r.get(CaptureResult.LENS_INTRINSIC_CALIBRATION)?.takeIf {
-            it.size >= 5 && kotlin.math.abs(it[2] - preW * 0.5f) < preW * 0.2f && kotlin.math.abs(it[3] - preH * 0.5f) < preH * 0.2f
-        }
-        val intr = resIntr ?: (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            c.get(CameraCharacteristics.LENS_INTRINSIC_CALIBRATION_MAXIMUM_RESOLUTION)
-        } else null) ?: return null
+        fun fits(v: FloatArray) = v.size >= 5 && abs(v[2] - preW * 0.5f) < preW * 0.2f && abs(v[3] - preH * 0.5f) < preH * 0.2f
+        val resIntr = r.get(CaptureResult.LENS_INTRINSIC_CALIBRATION)?.takeIf(::fits)
+        val intr = resIntr
+            ?: (if (maxResolution && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                c.get(CameraCharacteristics.LENS_INTRINSIC_CALIBRATION_MAXIMUM_RESOLUTION)
+            } else null)
+            ?: (if (!maxResolution) c.get(CameraCharacteristics.LENS_INTRINSIC_CALIBRATION)?.takeIf(::fits) else null)
+            ?: return null
         val dist = r.get(CaptureResult.LENS_DISTORTION)?.takeIf { resIntr != null && it.size >= 5 }
-            ?: (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            ?: (if (maxResolution && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 c.get(CameraCharacteristics.LENS_DISTORTION_MAXIMUM_RESOLUTION)
-            } else null) ?: r.get(CaptureResult.LENS_DISTORTION) ?: return null
+            } else null)
+            ?: (if (!maxResolution) c.get(CameraCharacteristics.LENS_DISTORTION) else null)
+            ?: r.get(CaptureResult.LENS_DISTORTION)
+            ?: return null
         if (intr.size < 5 || dist.size < 5) return null
         val f = intr[0]
         val cx = intr[2]
@@ -1015,13 +1148,11 @@ internal object MaxResDngWriter {
         return out
     }
 
-    private fun matrix(tag: Int, t: ColorSpaceTransform): Entry {
-        val pairs = Array(9) { i ->
+    private fun matrixPairs(t: ColorSpaceTransform): Array<Pair<Int, Int>> =
+        Array(9) { i ->
             val r = t.getElement(i % 3, i / 3)
             r.numerator to r.denominator
         }
-        return srationals(tag, *pairs)
-    }
 
     internal fun le(size: Int, fill: ByteBuffer.() -> Unit): ByteArray =
         ByteBuffer.allocate(size).order(ByteOrder.LITTLE_ENDIAN).apply(fill).array()
