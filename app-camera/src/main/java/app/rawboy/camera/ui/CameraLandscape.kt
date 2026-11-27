@@ -80,6 +80,29 @@ fun viewfinderTurns(displayRotation: Int): Int {
 }
 
 /**
+ * Turns a drag vector ([dx], [dy]) measured in the upright-portrait viewfinder coordinates (inside [Modifier.turned])
+ * back into screen coordinates and decides whether it is a horizontal swipe to step stocks:
+ * -1 for swipe right (previous stock), +1 for swipe left (next stock), 0 otherwise.
+ */
+fun swipeStockDelta(dx: Float, dy: Float, turns: Int, thresholdPx: Float): Int {
+    val k = ((turns % 4) + 4) % 4
+    val screenDx = when (k) {
+        0 -> dx
+        1 -> -dy
+        2 -> -dx
+        else -> dy
+    }
+    val screenDy = when (k) {
+        0 -> dy
+        1 -> dx
+        2 -> -dy
+        else -> -dx
+    }
+    if (abs(screenDx) < thresholdPx || abs(screenDx) <= abs(screenDy) * 1.5f) return 0
+    return if (screenDx < 0f) 1 else -1
+}
+
+/**
  * Lays the content out at this element's size turned by [turns] clockwise quarter turns and turns it: in its own
  * coordinates the content stays upright-portrait, so the viewfinder's tap points, focus ring and loupe need no
  * change. Compose maps touches through the layer's rotation.

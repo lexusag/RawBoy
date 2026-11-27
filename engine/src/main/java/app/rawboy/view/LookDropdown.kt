@@ -75,21 +75,30 @@ fun LookDropdown(
                 Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = menuMax)) {
-                // Colour, experimental and black and white looks under their own headings, when the list has several.
-                val sections = Looks.sections(looks)
-                for ((s, section) in sections.withIndex()) for ((i, look) in section.second.withIndex()) {
+                // Film stocks by family (Natural, Colour negative, Cinema print, Slide) or looks by LookGroup.
+                val sections = Looks.pickerSections(looks)
+                for ((s, section) in sections.withIndex()) for ((i, look) in section.looks.withIndex()) {
                     if (sections.size > 1 && i == 0) {
                         if (s > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                        MenuSectionLabel(section.first.label)
+                        MenuSectionLabel(section.label)
                     }
                     val isSelected = look.id == selected?.id
                     DropdownMenuItem(
                         text = {
-                            Text(
-                                look.name,
-                                fontWeight = if (isSelected) FontWeight.Bold else null,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                            )
+                            androidx.compose.foundation.layout.Column {
+                                Text(
+                                    look.name,
+                                    fontWeight = if (isSelected) FontWeight.Bold else null,
+                                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                )
+                                look.note?.let { note ->
+                                    Text(
+                                        note,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
                         },
                         onClick = {
                             open = false

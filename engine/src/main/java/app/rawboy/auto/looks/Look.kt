@@ -34,6 +34,10 @@ data class Look(
     /** Film grain and halation, 100 = the stock as formation.json describes it. */
     val filmGrain: Float = 75f,
     val halation: Float = 100f,
+    /** Short brand-free character note shown in pickers and the camera HUD. */
+    val note: String? = null,
+    /** Film stock family for Film mode pickers, or null for non-film looks. */
+    val filmGroup: FilmStockGroup? = null,
 ) {
     /** LutEntry id, as LutRepository names bundled LUTs. */
     val lutId: String? get() = lutFile?.let { "asset:luts/$it" }
@@ -53,6 +57,22 @@ enum class LookGroup(val label: String) {
     MONOCHROME("Black & white"),
 }
 
+/** The pickers' sections of Film mode stocks, in the order they are shown. */
+enum class FilmStockGroup(val label: String, val shortLabel: String) {
+    NATURAL("Natural", "Natural"),
+    COLOR_NEGATIVE("Colour negative", "Negative"),
+    CINEMA("Cinema print", "Cinema"),
+    SLIDE("Slide", "Slide"),
+}
+
+/** One section of a look or film-stock picker, in catalogue order. */
+data class LookPickerSection(
+    val id: String,
+    val label: String,
+    val shortLabel: String,
+    val looks: List<Look>,
+)
+
 /**
  * The looks RawBoy Auto offers, built on the LUTs in <repo>/luts.
  *
@@ -63,108 +83,130 @@ enum class LookGroup(val label: String) {
  */
 object Looks {
     /** The auto develop alone (which already has a fine grain). */
-    val NATURAL = Look("natural", "Natural", lutFile = null)
+    val NATURAL = Look("natural", "Natural", lutFile = null, note = "Auto develop, no film look")
     /** The default: suggested for portraits and everyday scenes. */
     val PORTRA_400 = Look(
         "portra400", "Yellow Portrait 400", "Yellow Portrait 400.cube",
         grain = 20f, bloom = 5f, portraitRetouch = 20f,
+        note = "Soft skin tones, wide latitude",
     )
     val PORTRA_800 = Look(
         "portra800", "Yellow Portrait 800", "Yellow Portrait 800.cube",
         grain = 35f, bloom = 15f, portraitRetouch = 20f,
+        note = "Warm shadows, faster film grain",
     )
     val EKTAR_100 = Look(
         "ektar100", "Yellow Vivid 100", "Yellow Vivid 100.cube",
         grain = 10f, highpass = 10f,
+        note = "Rich reds and blues, crisp detail",
     )
     val GOLD_200 = Look(
         "gold200", "Yellow Warm 200", "Yellow Warm 200.cube",
         grain = 25f, warmth = 200f, vignette = -10f,
+        note = "Golden sunlit warmth, gentle vignette",
     )
     val SUPERIA_400 = Look(
         "superia400", "Green Everyday 400", "Green Everyday 400.cube",
         grain = 25f,
+        note = "Punchy greens, everyday street colour",
     )
     val FUJI_400H = Look(
         "fuji400h", "Green Pastel 400", "Green Pastel 400.cube",
         grain = 20f, bloom = 5f, portraitRetouch = 20f,
+        note = "Airy pastels, cool mint highlights",
     )
     /** Tungsten cinema film, the base of CineStill 800T. */
     val VISION3_500T = Look(
         "vision500t", "Yellow Cine 500T", "Yellow Cine 500T.cube",
         grain = 35f, bloom = 20f,
+        note = "Tungsten cinema, soft highlight bloom",
     )
     /** Slide film: vivid colour, deep shadows. */
     val VELVIA_50 = Look(
         "velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube",
         grain = 8f, vignette = -10f,
+        note = "Vivid slide colour, deep shadows",
     )
     /** Direct flash 35mm film scan: vivid cadmium red, warm peach skin, high-key cool background. */
     val FILM_FLASH = Look(
         "filmflash", "Film Flash", "Film Flash.cube",
         grain = 20f,
+        note = "Cadmium reds, high-key cool flash scan",
     )
     /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
     val MOVIE_GREEN = Look(
         "moviegreen", "Movie Green", "Movie Green.cube",
         grain = 20f, vignette = -10f, experimental = true,
+        note = "Green-teal film grade, lifted blacks",
     )
     val MOVIE_GREEN_V2 = Look(
         "moviegreenv2", "Movie Green V2", "Movie Green V2.cube",
         grain = 20f, vignette = -10f, experimental = true,
+        note = "Refined green-teal film grade",
     )
     val REDSCALE = Look(
         "redscale", "Redscale", "Redscale.png",
         contrast = 5f, grain = 30f, vignette = -15f, experimental = true,
+        note = "Amber and crimson reversed emulsion",
     )
     val REDSCALE_V2 = Look(
         "redscalev2", "Redscale V2", "Redscale V2.cube",
         grain = 20f, vignette = -10f, experimental = true,
+        note = "Richer amber-red reversed emulsion",
     )
     /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
     val LAGOON = Look(
         "lagoon", "Lagoon", "Lagoon.cube",
         grain = 20f, vignette = -10f, experimental = true,
+        note = "Turquoise skin, amber sky colour swap",
     )
     /** Colour swap: greens turn violet, blue sky mint, reds stay (tools/swap_luts). */
     val VIOLET_DUST = Look(
         "violetdust", "Violet Dust", "Violet Dust.cube",
         grain = 20f, vignette = -10f, experimental = true,
+        note = "Violet greens, mint sky colour swap",
     )
     /** False-colour infrared: foliage and yellows turn crimson, magenta mids (tools/swap_luts). */
     val UNSEEN = Look(
         "unseen", "Unseen", "Unseen.cube",
         grain = 20f, vignette = -10f, experimental = true,
+        note = "False-colour crimson foliage",
     )
     /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
     val TRIX_SOFT = Look(
         "trixsoft", "Yellow Mono Soft", "Yellow Mono Soft.cube",
         grain = 20f, monochrome = true,
+        note = "Soft paper grade, open shadows",
     )
     /** Monochrome, classic: Tri-X on a normal paper grade. */
     val TRIX_400 = Look(
         "trix400", "Yellow Mono 400", "Yellow Mono 400.cube",
         grain = 25f, monochrome = true,
+        note = "Classic 400 contrast and grain",
     )
     /** Monochrome, Tri-X developed longer: harder and grainier. */
     val TRIX_PUSH = Look(
         "trixpush", "Yellow Mono Push", "Yellow Mono Push.cube",
         grain = 40f, monochrome = true,
+        note = "Pushed development, gritty contrast",
     )
     /** Monochrome, hard: pushed Tri-X on a hard paper grade, deep blacks, bright whites. */
     val TRIX_HARD = Look(
         "trixhard", "Yellow Mono Hard", "Yellow Mono Hard.cube",
         grain = 30f, vignette = -10f, monochrome = true,
+        note = "Hard paper, deep blacks and crisp whites",
     )
     /** Monochrome, Eastman Double-X cinema film. */
     val DOUBLE_X = Look(
         "doublex", "Yellow Cine Mono", "Yellow Cine Mono.cube",
         grain = 20f, monochrome = true,
+        note = "Cinema monochrome, silky midtones",
     )
     /** Monochrome, soft: Double-X developed short on a soft paper grade, open shadows. */
     val DOUBLE_X_SOFT = Look(
         "doublexsoft", "Yellow Cine Mono Soft", "Yellow Cine Mono Soft.cube",
         grain = 20f, monochrome = true,
+        note = "Soft cinema monochrome, open shadows",
     )
 
     val ALL = listOf(
@@ -196,4 +238,48 @@ object Looks {
      */
     fun sections(looks: List<Look>): List<Pair<LookGroup, List<Look>>> =
         LookGroup.entries.mapNotNull { g -> looks.filter { it.group == g }.takeIf { it.isNotEmpty() }?.let { g to it } }
+
+    /**
+     * Picker sections for any mode's list: Film stocks split by [FilmStockGroup] (Natural, Colour negative,
+     * Cinema print, Slide); LUT and B&W looks split by [LookGroup].
+     */
+    fun pickerSections(looks: List<Look>): List<LookPickerSection> =
+        if (looks.any { it.film != null }) {
+            FilmLooks.sections(looks).map { (g, items) -> LookPickerSection(g.name, g.label, g.shortLabel, items) }
+        } else {
+            sections(looks).map { (g, items) ->
+                val short = when (g) {
+                    LookGroup.COLOR -> "Colour"
+                    LookGroup.EXPERIMENTAL -> "Experimental"
+                    LookGroup.MONOCHROME -> "B&W"
+                }
+                LookPickerSection(g.name, g.label, short, items)
+            }
+        }
+
+    /** Display category label for a single look or film stock (shown in HUD and tray subtitle). */
+    fun categoryLabel(look: Look): String = when {
+        look.film != null -> FilmLooks.group(look).label
+        look.id == NATURAL.id -> FilmStockGroup.NATURAL.label
+        else -> look.group.label
+    }
+
+    /**
+     * Steps [delta] positions from [currentId] in [looks], wrapping around by default.
+     * Returns null when the list has fewer than two items, [delta] is zero, or clamping stays put.
+     */
+    fun step(looks: List<Look>, currentId: String, delta: Int, wrap: Boolean = true): Look? {
+        if (looks.size < 2 || delta == 0) return null
+        val cur = looks.indexOfFirst { it.id == currentId }.let { if (it < 0) 0 else it }
+        val next = if (wrap) Math.floorMod(cur + delta, looks.size) else (cur + delta).coerceIn(0, looks.lastIndex)
+        return if (next == cur) null else looks[next]
+    }
+
+    /** Immediate next and previous looks around [currentId] (wrapped) for background preloading. */
+    fun neighbors(looks: List<Look>, currentId: String): List<Look> {
+        if (looks.size < 2) return emptyList()
+        val next = step(looks, currentId, +1, wrap = true)
+        val prev = step(looks, currentId, -1, wrap = true)
+        return listOfNotNull(next, prev).distinctBy { it.id }.filter { it.id != currentId }
+    }
 }

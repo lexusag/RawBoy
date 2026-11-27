@@ -65,8 +65,9 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 
 | Feature | Since | Android | iOS | Notes |
 |---|---|---|---|---|
-| Look menu: Color and Experimental sections | ≤1.1.1 | ✓ | ✓ | Movie Green, Redscale, Lagoon, Violet Dust, Unseen; V2 looks 1.15.15 |
-| **Film mode** (12 stocks, grain, halation) | 1.7.0 (was RawBoy Film) | ✓ | ✓ | On by default; its own pick |
+| Look & stock picker: non-blocking bottom-docked tray with family filters (Colour negative, Cinema print, Slide; Colour, Experimental), 1-line character notes per stock, and top-right loaded-stock badge | ≤1.1.1; tray/groups/badge unreleased | ✓ | ✓ | Keeps the upper viewfinder live while auditioning stocks; Pro's stock dropdown also groups film stocks with notes |
+| **Swipe viewfinder to switch stock/look** (orientation-aware horizontal swipe + transient HUD + background neighbour preloading) | unreleased | ✓ | ✓ | Wraps through the active mode's list with haptics; locked during video recording and in Android Easy/Street modes; TalkBack / VoiceOver step actions |
+| **Film mode** (12 stocks in Colour negative, Cinema print & Slide families, grain, halation) | 1.7.0 (was RawBoy Film) | ✓ | ✓ | On by default; its own pick |
 | **B&W mode** with filters (None, Yellow, Orange, Red, Green) | 1.6.3 | ✓ | ✓ | Filter as a menu 1.8.5; the DNG stays colour |
 | Film + B&W together (punchier) | 1.7.0 | ✓ | ✓ | |
 | Grain setting (on by default) | 1.16.10 | ✓ | ✓ | |

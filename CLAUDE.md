@@ -96,7 +96,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   - `gl/ThumbnailRenderer.kt` — develops a 512 px whole-image copy off screen (Auto's thumbnails),
     via `OffscreenDeveloper.renderPreview`.
   - `view/DevelopPreview.kt` (the GLSurfaceView composable), `view/SliderTapTracker.kt`, `view/CompactSlider.kt` (the
-    one-row slider behind Pro's `ParamSlider`, Auto's and Camera's sliders), `view/LookDropdown.kt` (Pro's stock and Camera's look menu).
+    one-row slider behind Pro's `ParamSlider`, Auto's and Camera's sliders), `view/LookDropdown.kt` (Pro's grouped stock menu with character notes; Camera uses a non-blocking bottom-docked `StockTray`, top-right loaded-stock badge and orientation-aware viewfinder swipe with neighbour LUT preloading on Android and iOS).
   - `view/PhotoWithControls.kt` (iOS `view/PhotoWithControls.swift`) — Pro's editor and Auto's photo view: controls under the
     photo when the window is taller than wide, a side panel (≤ 360 dp, ≤ 45% of the width) on the right when wider. The web
     does the same with `@media (orientation: portrait)` / `STACKED` (`useMediaQuery.ts`); toolbar rules stay width-based.

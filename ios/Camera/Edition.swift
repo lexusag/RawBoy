@@ -31,6 +31,13 @@ enum Edition {
 
     static func filmLook(_ id: String) -> Look { filmLooks.first { $0.id == id } ?? FilmLooks.byId(id) }
 
+    /** Active look list for the current mode (B&W stocks, Film stocks, or LUT looks). */
+    static func looksFor(monoMode: Bool, filmMode: Bool) -> [Look] {
+        if monoMode { return monoLooks }
+        if filmMode { return filmLooks }
+        return looks
+    }
+
     /** Photos albums for the JPEGs and the DNGs; JPEGs are named IMG_…-<jpegSuffix>.jpg. */
     static let album = "RawBoy Camera"
     static let rawAlbum = "RawBoy Camera RAW"

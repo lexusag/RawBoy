@@ -7,6 +7,9 @@ struct CameraScreen: View {
     @ObservedObject var vm: CameraViewModel
     @State private var showSettings = false
     @State private var showHelp = false
+    @State private var stockTrayOpen = false
+    @State private var stockHudVisible = false
+    @State private var stockHudTask: Task<Void, Never>?
     @State private var blink = 0.0
     @State private var shutterScale = 1.0
     @State private var holding = false
@@ -26,6 +29,25 @@ struct CameraScreen: View {
     private static let loupeSize: CGFloat = 128
     private static let loupeGap: CGFloat = 64
     private static let loupeZoom: Float = 3
+    private static let stockSwipeThreshold: Double = 44
+    private static let stockHudDurationNs: UInt64 = 1_350_000_000
+
+    private func flashStockHud() {
+        stockHudTask?.cancel()
+        withAnimation(.easeOut(duration: 0.12)) { stockHudVisible = true }
+        stockHudTask = Task {
+            try? await Task.sleep(nanoseconds: Self.stockHudDurationNs)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.25)) { stockHudVisible = false }
+        }
+    }
+
+    private func stepStock(_ delta: Int) {
+        if vm.stepLook(delta) != nil {
+            UISelectionFeedbackGenerator().selectionChanged()
+            if !stockTrayOpen { flashStockHud() }
+        }
+    }
 
     var body: some View {
         // Portrait: the bar, viewfinder, controls and shutter row stacked. Landscape (the phone turned sideways): the
@@ -93,6 +115,9 @@ struct CameraScreen: View {
         .toast($vm.message)
         .sheet(isPresented: $showSettings) { SettingsSheet(vm: vm) }
         .modifier(HardwareShutter(enabled: !showSettings && !showHelp, action: vm.shutter))
+        .onChange(of: vm.recordingSeconds != nil) { _, recording in
+            if recording { stockTrayOpen = false }
+        }
         .onChange(of: vm.shutterCount) { _, _ in
             // Shutter feedback: the viewfinder blinks dark, the shutter button dips, and a haptic tick.
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -218,10 +243,17 @@ struct CameraScreen: View {
                         Viewfinder(renderer: vm.renderer)
                         GeometryReader { geo in
                             Color.clear.contentShape(Rectangle())
-                                // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
-                                .onTapGesture { p in vm.focusAt(p.x / geo.size.width, p.y / geo.size.height) }
+                                // Tap: dismiss the stock tray if open, else focus lock at that point.
+                                .onTapGesture { p in
+                                    if stockTrayOpen {
+                                        withAnimation(.easeOut(duration: 0.16)) { stockTrayOpen = false }
+                                    } else {
+                                        vm.focusAt(p.x / geo.size.width, p.y / geo.size.height)
+                                    }
+                                }
                                 // Press and hold: the auto develop without the look.
                                 .onLongPressGesture(minimumDuration: 0.25, perform: {}, onPressingChanged: { pressing in
+                                    guard !stockTrayOpen else { return }
                                     if pressing {
                                         holding = true
                                         Task {
@@ -233,13 +265,33 @@ struct CameraScreen: View {
                                         if vm.compare { vm.setCompare(false) }
                                     }
                                 })
+                                // Horizontal swipe: step through the active mode's stocks/looks (in screen coordinates).
+                                .simultaneousGesture(
+                                    DragGesture(minimumDistance: 16)
+                                        .onChanged { drag in
+                                            if hypot(drag.translation.width, drag.translation.height) > 12 {
+                                                holding = false
+                                                if vm.compare { vm.setCompare(false) }
+                                            }
+                                        }
+                                        .onEnded { drag in
+                                            guard vm.recordingSeconds == nil, vm.dragPoint == nil, !vm.compare else { return }
+                                            let delta = CameraOrientation.swipeStockDelta(
+                                                dx: drag.translation.width,
+                                                dy: drag.translation.height,
+                                                turns: turns,
+                                                threshold: Self.stockSwipeThreshold
+                                            )
+                                            if delta != 0 { stepStock(delta) }
+                                        }
+                                )
                             // While the ring is dragged it shows there, with a loupe; it focuses on release.
                             if let p = vm.dragPoint ?? vm.focusPoint {
                                 let state = vm.controller.frames
                                 FocusRing(scanning: vm.dragPoint == nil && state.focusing,
                                           box: CGFloat(state.focusBox) * min(geo.size.width, geo.size.height))
                                     .position(x: p.x * geo.size.width, y: p.y * geo.size.height)
-                                focusHandle(p, geo.size)
+                                if !stockTrayOpen { focusHandle(p, geo.size) }
                                 if vm.dragPoint != nil, let l = Self.loupe(at: p, in: geo.size) {
                                     let side = CGFloat(l.size) * geo.size.width
                                     LoupeFrame(box: CGFloat(state.focusBox) * min(geo.size.width, geo.size.height) * CGFloat(l.zoom))
@@ -263,14 +315,14 @@ struct CameraScreen: View {
                 case .ready:
                     EmptyView()
                 }
-                if vm.lenses.count > 1 {
+                if vm.lenses.count > 1 && !stockTrayOpen {
                     LensSelector(labels: vm.lenses.map(\.label), selected: vm.settings.lens, onSelect: vm.selectLens)
                         .disabled(vm.recordingSeconds != nil)
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, 16)
                 }
                 // Above the lens selector, out of the way of the focus ring and the top badges.
-                if let code = vm.qrCode {
+                if !stockTrayOpen, let code = vm.qrCode {
                     QrBar(code: code, onOpen: { vm.openQr(code) }, onDismiss: vm.dismissQr)
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .padding(.horizontal, 16)
@@ -291,38 +343,73 @@ struct CameraScreen: View {
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 8)
                 }
-                Button { vm.setExposureLock(!vm.exposureLocked) } label: {
-                    Text(vm.exposureLocked ? "AE/WB LOCK  ✕" : "AE/WB LOCK")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(vm.exposureLocked ? Color.black : .white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(Capsule().fill(vm.exposureLocked ? Color(red: 1, green: 0.84, blue: 0.31) : Color.black.opacity(0.4)))
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
+                if !stockTrayOpen {
+                    Button { vm.setExposureLock(!vm.exposureLocked) } label: {
+                        Text(vm.exposureLocked ? "AE/WB LOCK  ✕" : "AE/WB LOCK")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(vm.exposureLocked ? Color.black : .white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(vm.exposureLocked ? Color(red: 1, green: 0.84, blue: 0.31) : Color.black.opacity(0.4)))
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, 12)
+                    .padding(.bottom, vm.lenses.count > 1 ? 56 : 8)
+                    .accessibilityLabel(vm.exposureLocked ? "Unlock exposure and white balance" : "Lock exposure and white balance")
                 }
-                .buttonStyle(.plain)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(.leading, 12)
-                .padding(.bottom, vm.lenses.count > 1 ? 56 : 8)
-                .accessibilityLabel(vm.exposureLocked ? "Unlock exposure and white balance" : "Lock exposure and white balance")
                 if vm.compare {
                     OverlayLabel("Without look").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                // Top right: the histogram (Settings), then the raw format when it isn't the chosen one.
-                VStack(alignment: .trailing, spacing: 0) {
+                // Top right: histogram (Settings), raw format badge when non-default, and quiet loaded-stock badge.
+                VStack(alignment: .trailing, spacing: 6) {
                     if vm.settings.showHistogram {
                         HistogramView(histogram: vm.histogram)
                             .frame(width: 120, height: 48)
-                            .padding([.top, .trailing], 12)
                             .allowsHitTesting(false)
                     }
                     if vm.recording != vm.settings.rawFormat {
-                        OverlayLabel(vm.recording == .proRaw ? "ProRAW" : "RAW")
-                            .padding(.top, vm.settings.showHistogram ? -6 : 0)
+                        Text(vm.recording == .proRaw ? "ProRAW" : "RAW")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+                    }
+                    if !stockTrayOpen && !vm.compare {
+                        LoadedStockBadge(name: vm.settings.look.name, enabled: vm.recordingSeconds == nil) {
+                            withAnimation(.easeOut(duration: 0.18)) { stockTrayOpen = true }
+                        }
                     }
                 }
+                .padding([.top, .trailing], 10)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                // Transient HUD over the frame when swiping stocks or toggling Film/B&W.
+                if stockHudVisible && !stockTrayOpen && !vm.compare {
+                    StockSwitchHud(look: vm.settings.look)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, vm.focusPoint != nil ? 58 : 12)
+                        .padding(.horizontal, 24)
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+                // Non-blocking bottom-docked stock tray: keeps the upper viewfinder live while auditioning stocks.
+                if stockTrayOpen && vm.recordingSeconds == nil {
+                    StockTray(
+                        looks: vm.settings.activeLooks,
+                        selected: vm.settings.look,
+                        onSelect: { look in
+                            vm.setLook(look.id)
+                            UISelectionFeedbackGenerator().selectionChanged()
+                        },
+                        onClose: {
+                            withAnimation(.easeOut(duration: 0.16)) { stockTrayOpen = false }
+                        }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
                 if vm.settings.showGrid { GridOverlay() }
                 Color.black.opacity(blink).allowsHitTesting(false)
             }
@@ -457,12 +544,25 @@ struct CameraScreen: View {
 
     // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
     private var lookPicker: some View {
-        LookPicker(looks: vm.settings.monoMode ? Edition.monoLooks : vm.settings.filmMode ? Edition.filmLooks : Edition.looks,
-                   selectedId: vm.settings.look.id, onSelect: vm.setLook,
-                   film: vm.settings.film,
-                   onFilm: vm.setFilm,
-                   mono: Edition.monoLooks.isEmpty ? nil : vm.settings.monoMode,
-                   onMono: vm.setMono)
+        LookPicker(
+            selectedName: vm.settings.look.name,
+            open: stockTrayOpen,
+            enabled: vm.recordingSeconds == nil,
+            onToggleOpen: {
+                withAnimation(.easeOut(duration: 0.18)) { stockTrayOpen.toggle() }
+            },
+            onStep: stepStock,
+            film: vm.settings.film,
+            onFilm: { on in
+                vm.setFilm(on)
+                if !stockTrayOpen { flashStockHud() }
+            },
+            mono: Edition.monoLooks.isEmpty ? nil : vm.settings.monoMode,
+            onMono: { on in
+                vm.setMono(on)
+                if !stockTrayOpen { flashStockHud() }
+            }
+        )
     }
 
     /**
@@ -683,11 +783,13 @@ private struct FilterRow: View {
     }
 }
 
-/** The look, picked from a menu (Pro's stock picker). */
+/** Film / B&W toggles plus the loaded-stock button that opens the non-blocking StockTray over the viewfinder. */
 private struct LookPicker: View {
-    let looks: [Look]
-    let selectedId: String
-    let onSelect: (String) -> Void
+    let selectedName: String
+    let open: Bool
+    let enabled: Bool
+    let onToggleOpen: () -> Void
+    let onStep: (Int) -> Void
     /** The Film and B&W toggles' states, side by side in the label's place; nil = no such toggle. */
     var film: Bool? = nil
     var onFilm: (Bool) -> Void = { _ in }
@@ -705,22 +807,228 @@ private struct LookPicker: View {
                 }
                 .frame(width: 88, alignment: .leading)
             }
-            Picker("Look", selection: Binding(get: { selectedId }, set: { onSelect($0) })) {
-                // Colour, experimental and black and white looks under their own headings, when the list has several.
-                let sections = Looks.sections(looks)
-                if sections.count < 2 {
-                    ForEach(looks) { Text($0.name).tag($0.id) }
-                } else {
-                    ForEach(sections) { s in
-                        Section(s.group.label) { ForEach(s.looks) { Text($0.name).tag($0.id) } }
-                    }
+            Button(action: onToggleOpen) {
+                HStack(spacing: 6) {
+                    Text(selectedName)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    Spacer(minLength: 0)
+                    Image(systemName: open ? "chevron.up" : "chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.cameraAccent)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 36)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(open ? Color.cameraAccent.opacity(0.16) : Color(white: 0.12))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(open ? Color.cameraAccent : Color(white: 0.28), lineWidth: 1)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 10))
+            }
+            .buttonStyle(.plain)
+            .disabled(!enabled)
+            .accessibilityLabel("Film stock")
+            .accessibilityValue(selectedName)
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: onStep(1)
+                case .decrement: onStep(-1)
+                @unknown default: break
                 }
             }
-            .pickerStyle(.menu)
-            .tint(Color.cameraAccent)
-            Spacer()
         }
         .frame(height: ValueSlider.rowHeight)
+    }
+}
+
+/** Quiet corner indicator showing which stock/look is loaded; tapping opens the stock tray. */
+private struct LoadedStockBadge: View {
+    let name: String
+    let enabled: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Color.cameraAccent)
+                    .frame(width: 6, height: 6)
+                Text(name)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 9)
+            .padding(.vertical, 5)
+            .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.white.opacity(0.15), lineWidth: 1))
+            .frame(maxWidth: 180, alignment: .trailing)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .accessibilityLabel("Loaded stock, \(name)")
+    }
+}
+
+/** Brief translucent readout over the viewfinder when swiping stocks or toggling Film/B&W. */
+private struct StockSwitchHud: View {
+    let look: Look
+
+    var body: some View {
+        VStack(spacing: 2) {
+            Text(Looks.categoryLabel(look).uppercased())
+                .font(.caption2.weight(.semibold))
+                .tracking(0.6)
+                .foregroundStyle(Color.cameraAccent)
+                .lineLimit(1)
+            Text(look.name)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+            if let note = look.note {
+                Text(note)
+                    .font(.caption)
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .lineLimit(1)
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(Color(red: 0.07, green: 0.07, blue: 0.08).opacity(0.82), in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.white.opacity(0.2), lineWidth: 1))
+    }
+}
+
+/**
+ * Non-blocking bottom-docked stock picker over the bottom edge of the viewfinder: category filter chips when the mode
+ * has multiple families (Colour negative / Cinema print / Slide, or Colour / Experimental), a horizontally scrollable
+ * strip of stocks that stays open so each tap previews live, and a 1-line character note for the loaded stock.
+ */
+private struct StockTray: View {
+    let looks: [Look]
+    let selected: Look
+    let onSelect: (Look) -> Void
+    let onClose: () -> Void
+
+    @State private var activeCategory: String? = nil
+
+    private var sections: [LookPickerSection] { Looks.pickerSections(looks) }
+    private var filterableSections: [LookPickerSection] {
+        sections.count > 1 ? sections.filter { $0.id != FilmStockGroup.natural.rawValue } : []
+    }
+    private var visibleLooks: [Look] {
+        if let activeCategory, let sec = sections.first(where: { $0.id == activeCategory }) {
+            return sec.looks
+        }
+        return looks
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if !filterableSections.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            categoryChip(label: "All", isSelected: activeCategory == nil) { activeCategory = nil }
+                            ForEach(filterableSections) { sec in
+                                categoryChip(label: sec.shortLabel, isSelected: activeCategory == sec.id) {
+                                    activeCategory = sec.id
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Text(Looks.categoryLabel(selected))
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(Color.cameraAccent)
+                    Spacer()
+                }
+                Button("Done", action: onClose)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(Color.white.opacity(0.85))
+                    .buttonStyle(.plain)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+            }
+
+            ScrollViewReader { proxy in
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(visibleLooks) { look in
+                            let isSelected = look.id == selected.id
+                            Button { onSelect(look) } label: {
+                                Text(look.name)
+                                    .font(.caption.weight(isSelected ? .semibold : .regular))
+                                    .foregroundStyle(isSelected ? Color(red: 0.1, green: 0.07, blue: 0.02) : Color(white: 0.93))
+                                    .lineLimit(1)
+                                    .padding(.horizontal, 12)
+                                    .padding(.vertical, 8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .fill(isSelected ? Color.cameraAccent : Color(white: 0.11))
+                                    )
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(isSelected ? Color.cameraAccent : Color(white: 0.2), lineWidth: 1)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .id(look.id)
+                            .accessibilityAddTraits(isSelected ? .isSelected : [])
+                        }
+                    }
+                }
+                .onAppear { proxy.scrollTo(selected.id, anchor: .center) }
+                .onChange(of: selected.id) { _, id in
+                    withAnimation(.easeOut(duration: 0.18)) { proxy.scrollTo(id, anchor: .center) }
+                }
+                .onChange(of: activeCategory) { _, _ in
+                    proxy.scrollTo(selected.id, anchor: .center)
+                }
+            }
+
+            HStack(spacing: 4) {
+                Text(Looks.categoryLabel(selected))
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color.cameraAccent)
+                    .lineLimit(1)
+                if let note = selected.note {
+                    Text("· \(note)")
+                        .font(.caption2)
+                        .foregroundStyle(Color(white: 0.62))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color(red: 0.07, green: 0.07, blue: 0.08).opacity(0.92))
+        .overlay(alignment: .top) { Rectangle().fill(Color(white: 0.2)).frame(height: 1) }
+        .onChange(of: looks.map(\.id)) { _, _ in activeCategory = nil }
+    }
+
+    private func categoryChip(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.caption2.weight(isSelected ? .semibold : .regular))
+                .foregroundStyle(isSelected ? Color(red: 0.1, green: 0.07, blue: 0.02) : Color(white: 0.82))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 4)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(isSelected ? Color.cameraAccent : Color(white: 0.16))
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }
 

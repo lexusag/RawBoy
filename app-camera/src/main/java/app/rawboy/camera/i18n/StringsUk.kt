@@ -625,4 +625,118 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Лінія горизонту поверх видошукача",
     "Double-press the power button (with RawBoy Camera as the default camera), use the Street shortcut or Quick Settings tile, or turn on Settings › Street mode. Starts momentarily with Easy mode's Colour or B&W look, Snap Focus (AF, 1.5m, 2.5m, 5m or ∞ for zero focus lag), minimum shutter speed floor, single-frame ZSL and an oversized shutter. Tap the amber STREET badge to switch to the full camera." to
         "Двічі натисніть кнопку живлення (якщо RawBoy Camera — камера за замовчуванням), скористайтеся ярликом «Вулиця», плиткою швидких налаштувань або увімкніть Налаштування › Вуличний режим. Запускається миттєво з виглядом Колір або Ч/Б, зонним фокусом Snap Focus (AF, 1.5m, 2.5m, 5m або ∞ без затримки фокусування), мінімальною витримкою, миттєвим ZSL-кадром і великою кнопкою затвора. Торкніться бурштинового значка ВУЛИЦЯ, щоб перейти до повної камери.",
+    "Next stock" to
+        "Наступна плівка",
+    "Previous stock" to
+        "Попередня плівка",
+    "Film stock, %s" to
+        "Плівка, %s",
+    "Loaded stock, %s" to
+        "Завантажена плівка, %s",
+    "Open" to
+        "Відкрито",
+    "Closed" to
+        "Закрито",
+    "All" to
+        "Усі",
+    "Done" to
+        "Готово",
+    "Natural" to
+        "Природний",
+    "Colour negative" to
+        "Кольоровий негатив",
+    "Negative" to
+        "Негатив",
+    "Cinema print" to
+        "Кіноплівка",
+    "Cinema" to
+        "Кіно",
+    "Slide" to
+        "Слайд",
+    "Color" to
+        "Колір",
+    "Colour" to
+        "Колір",
+    "Experimental" to
+        "Експериментальні",
+    "Black & white" to
+        "Чорно-білі",
+    "Auto develop, no film look" to
+        "Автопроявлення, без стилю плівки",
+    "Soft skin tones, wide latitude" to
+        "М’які тони шкіри, широка широта",
+    "Warm shadows, punchier grain" to
+        "Теплі тіні, виразніше зерно",
+    "Warm shadows, faster film grain" to
+        "Теплі тіні, зерно високочутливої плівки",
+    "Rich reds and blues, fine grain" to
+        "Насичені червоні й сині, дрібне зерно",
+    "Rich reds and blues, crisp detail" to
+        "Насичені червоні й сині, чітка деталізація",
+    "Golden sunlit cast, warm mids" to
+        "Золотистий сонячний відтінок, теплі півтони",
+    "Golden sunlit warmth, gentle vignette" to
+        "Золотисте сонячне тепло, легке віньєтування",
+    "Airy pastels, cool mint highlights" to
+        "Повітряна пастель, прохолодні м’ятні світла",
+    "Punchy greens, crisp everyday colour" to
+        "Виразні зелені, чіткий повсякденний колір",
+    "Punchy greens, everyday street colour" to
+        "Виразні зелені, вуличний повсякденний колір",
+    "Daylight cinema print, smooth roll-off" to
+        "Денна кіноплівка, плавні світла",
+    "Tungsten cinema, cool shadows and halation" to
+        "Вольфрамова кіноплівка, прохолодні тіні й ореол",
+    "Tungsten cinema, soft highlight bloom" to
+        "Вольфрамова кіноплівка, м’яке світіння світлих ділянок",
+    "Deep blacks, bold landscape saturation" to
+        "Глибокі чорні, насичені пейзажні кольори",
+    "Vivid slide colour, deep shadows" to
+        "Насичений слайдовий колір, глибокі тіні",
+    "Crisp neutral slide, clean blues" to
+        "Чіткий нейтральний слайд, чисті сині",
+    "Clean contrast, cool bright whites" to
+        "Чистий контраст, прохолодні яскраві білі",
+    "Archival reds and yellows, dense contrast" to
+        "Архівні червоні й жовті, щільний контраст",
+    "Cadmium reds, high-key cool flash scan" to
+        "Кадмієві червоні, прохолодний скан зі спалахом",
+    "Green-teal film grade, lifted blacks" to
+        "Зелено-бірюзовий кіногрейд, підняті чорні",
+    "Refined green-teal film grade" to
+        "Уточнений зелено-бірюзовий кіногрейд",
+    "Amber and crimson reversed emulsion" to
+        "Бурштиново-багряна зворотна емульсія",
+    "Richer amber-red reversed emulsion" to
+        "Насиченіша бурштиново-червона зворотна емульсія",
+    "Turquoise skin, amber sky colour swap" to
+        "Бірюзова шкіра, бурштинове небо (заміна кольорів)",
+    "Violet greens, mint sky colour swap" to
+        "Фіолетова зелень, м’ятне небо (заміна кольорів)",
+    "False-colour crimson foliage" to
+        "Псевдокольорове багряне листя",
+    "Soft paper grade, open shadows" to
+        "М’який фотопапір, відкриті тіні",
+    "Classic 400 contrast and grain" to
+        "Класичний контраст і зерно ISO 400",
+    "Pushed development, gritty contrast" to
+        "Пуш-проявлення, жорсткий зернистий контраст",
+    "Hard paper, deep blacks and crisp whites" to
+        "Твердий папір, глибокі чорні й чіткі білі",
+    "Cinema monochrome, silky midtones" to
+        "Чорно-біла кіноплівка, м’які півтони",
+    "Soft cinema monochrome, open shadows" to
+        "М’яка чорно-біла кіноплівка, відкриті тіні",
+    "The film strip left of the stock picker. On (the default), the picker lists film stocks grouped by family (Colour negative, Cinema print, Slide), developed as the negative, its print and scan, with film grain and the red halation around bright lights; off, the looks on RawBoy's film LUTs. Each keeps its own pick. B&W uses only the black and white looks (with more contrast and grain while Film is on), and switching it off comes back to Film." to
+        "Плівка зліва від вибору плівки. Увімкнено (типово): вибір показує плівки за групами (Кольоровий негатив, Кіноплівка, Слайд), проявлені як негатив, відбиток і скан, із зерном і червоним ореолом; вимкнено: стилі на плівкових LUT RawBoy. Кожен режим пам’ятає свій вибір. Ч/Б показує лише чорно-білі стилі (з більшим контрастом і зерном при ввімкненій «Плівці»), а вимкнення Ч/Б повертає до «Плівки».",
+    "Stock picker & top-right badge" to
+        "Вибір плівки та значок угорі праворуч",
+    "Tap the stock button under the picture (or the loaded-stock badge in the top right) to open a live stock tray along the bottom of the viewfinder with family filters and a short note per stock, leaving the frame visible while you preview." to
+        "Торкніться кнопки плівки під кадром (або значка завантаженої плівки угорі праворуч), щоб відкрити панель плівок унизу видошукача з фільтрами груп і коротким описом кожної плівки — кадр залишається видимим під час перегляду.",
+    "Swipe the viewfinder" to
+        "Жест по видошукачу",
+    "Swipe left or right across the viewfinder to step through the active mode's stocks or looks without opening the tray; the loaded stock name and note appear briefly over the frame." to
+        "Проведіть ліворуч або праворуч по видошукачу, щоб перемикати плівки чи стилі поточного режиму без відкриття панелі; назва й короткий опис ненадовго з’являться поверх кадру.",
+    "The B&W button left of the stock picker switches to black and white: the picker lists the black and white films, and Filter (Yellow, Orange, Red, Green) takes Warmth's place. Like a coloured filter on the lens, it lightens its own colour and darkens the others: Red gives dark skies and smooth skin, Green darker skin and lighter leaves. The DNG stays in colour." to
+        "Кнопка Ч/Б зліва від вибору плівки вмикає чорно-біле: у виборі чорно-білі плівки, а Фільтр (жовтий, помаранчевий, червоний, зелений) заступає Теплоту. Як кольоровий фільтр на об’єктиві, він освітлює свій колір і затемнює інші: червоний дає темне небо й гладку шкіру, зелений — темнішу шкіру й світліше листя. DNG залишається кольоровим.",
 )

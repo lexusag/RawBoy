@@ -31,6 +31,13 @@ internal object Edition {
 
     fun filmLook(id: String): Look = filmLooks.firstOrNull { it.id == id } ?: FilmLooks.byId(id)
 
+    /** Active look list for the current mode (B&W stocks, Film stocks, or LUT looks). */
+    fun looksFor(monoMode: Boolean, filmMode: Boolean): List<Look> = when {
+        monoMode -> monoLooks
+        filmMode -> filmLooks
+        else -> looks
+    }
+
     /** Pictures/<FOLDER> (JPEGs) and Pictures/<FOLDER>/RAW (DNGs); JPEGs are named IMG_…-<JPEG_SUFFIX>.jpg. */
     const val FOLDER = "RawBoy Camera"
     const val JPEG_SUFFIX = "camera"
