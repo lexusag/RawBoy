@@ -2,6 +2,10 @@ import { DevelopInputs, DevelopProgram, FullscreenQuad, SampleGeometry, createTe
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
 import { WaveletDenoise } from './WaveletDenoise';
+import type { InputPlacement } from './CensorPass';
+
+/** Where the downscaled preview sits in the full-resolution image. */
+const previewAt = (img: PreviewImage): InputPlacement => ({ x: 0, y: 0, scaleX: img.fullWidth / img.width, scaleY: img.fullHeight / img.height });
 import { ZoomMath, contains, rect, type DetailTile } from './Zoom';
 
 /** Frame colours around the photo, cycled by clicking outside it. Levels are display-encoded (sRGB). */
@@ -294,7 +298,7 @@ export class DevelopRenderer {
     const outH = p.lens.outputHeight;
     const frame = this.frameWidth;
     const r = ZoomMath.fitRect(this.viewWidth, this.viewHeight, outW, outH, frame + this.margin);
-    const input = this.denoised(p, this.previewTexture, `p${this.previewVersion}`, img.width, img.height, img.width / img.fullWidth);
+    const input = this.prepared(p, this.previewTexture, `p${this.previewVersion}`, img.width, img.height, img.width / img.fullWidth, 'preview', previewAt(img));
 
     this.clearFrame(r[0], r[1], r[2], r[3]);
     gl.bindTexture(gl.TEXTURE_2D, input);
@@ -317,7 +321,7 @@ export class DevelopRenderer {
       ((scale === 1 && !this.staging) || contains(tile.rect, p.lens.sourceBounds(view, 0)));
     let geometry: SampleGeometry;
     if (useTile) {
-      const input = this.denoised(p, this.detailTexture, `d${this.detailVersion}`, tile.rect.width, tile.rect.height, 1);
+      const input = this.prepared(p, this.detailTexture, `d${this.detailVersion}`, tile.rect.width, tile.rect.height, 1, 'tile', { x: tile.rect.x, y: tile.rect.y, scaleX: 1, scaleY: 1 });
       gl.bindTexture(gl.TEXTURE_2D, input);
       if (input === this.detailTexture) {
         // Pixels stay crisp from 100% up; below it, smooth. (The denoise output, shared with the fit view, stays linear.)
@@ -327,7 +331,7 @@ export class DevelopRenderer {
       }
       geometry = new SampleGeometry(tile.rect.width, tile.rect.height, tile.rect, view, img.fullWidth, img.fullHeight);
     } else {
-      const input = this.denoised(p, this.previewTexture, `p${this.previewVersion}`, img.width, img.height, img.width / img.fullWidth);
+      const input = this.prepared(p, this.previewTexture, `p${this.previewVersion}`, img.width, img.height, img.width / img.fullWidth, 'preview', previewAt(img));
       gl.bindTexture(gl.TEXTURE_2D, input);
       geometry = new SampleGeometry(img.width, img.height, rect(0, 0, img.fullWidth, img.fullHeight), view, img.fullWidth, img.fullHeight);
     }
@@ -416,6 +420,18 @@ export class DevelopRenderer {
     gl.clearColor(g, g, g, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.disable(gl.SCISSOR_TEST);
+  }
+
+  /**
+   * [texture] through the pre-passes: the wavelet denoise when denoise is on, then the censor layers (CensorPass), so
+   * the develop shader never reads a censored area's original pixels. [at]: where the texture sits in the image.
+   */
+  private prepared(p: ShaderParams, texture: WebGLTexture, key: string, width: number, height: number, pixelScale: number, role: string, at: InputPlacement): WebGLTexture {
+    const denoised = this.denoised(p, texture, key, width, height, pixelScale);
+    if (!this.inputs.censor.active(p.censor)) return denoised;
+    const out = this.inputs.censor.apply(p.censor, role, denoised, `${key}|${this.denoisedInput ? `${p.denoise},${p.colorDenoise}` : ''}`, width, height, at);
+    this.bindTarget();
+    return out;
   }
 
   /** [texture], or its copy through the wavelet denoise pre-pass when denoise is on (see WaveletDenoise). */

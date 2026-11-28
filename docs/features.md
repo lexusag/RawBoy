@@ -90,6 +90,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | **Light leaks: procedural generator** (Generate: 13 types, 🎲 Random, colour adjustment, x/y box) | unreleased | ✓ | ✓ | ✓ | ✓ | `shaders/film_leak.glsl`, `FilmLeaks.ts/.swift/.kt`: Edge burn, Blob, Streak, Sprocket holes, Fog, Rebate glow, Flare, Start/End of roll, Film tear, Dust & scratches, Chemical stain, Scratches (↔ Horizontal / ↕ Vertical); shares the `MAX_LEAKS` (4) budget |
 | Light effects (lightning, sparks, trails, swirl) | 1.11.0 | ✓ | ✓ 1.17.0 | ✓ 1.13.0 | ✓ 1.13.0 | |
 | **Healing brush** | 1.15.1 | ✓ | ✓ 1.17.2 | ◐ | — | iOS has the engine (`rb_heal`) but no button (its bar is full) |
+| **Censor** (Artistic Paintbrush: paint, mosaic, smear, frosted glass, ink, heal away; brush colour, pen pressure) | unreleased | ✓ | — | — | — | Web Pro first; Auto renders censor layers from edits (thumbnails, export) but can't edit them. Model, raster and shader (`Censor.ts`, `CensorRaster.ts`, `shaders/censor.frag`) are written to port |
 | Auto Dev button | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Histogram + clipping marks | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Undo / Redo | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
@@ -119,6 +120,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Middle button pans, Space pans | 1.15.3 | ✓ | ✓ 1.17.0 | n/a | n/a | |
 | Keyboard shortcuts + non-Latin layouts | 1.2.0 | ✓ | ✓ 1.17.0 (physical key codes) | n/a | n/a | |
 | `D` frame colour | 1.14.0 | ✓ | ✓ 1.17.0 | — | — | tap outside the photo on the phones |
+| `X` Censor (P paint, E erase, I pick colour, `[` `]`) | unreleased | ✓ | — | n/a | n/a | |
 | `C` Crop & rotate, `⇧C` Copy previous, Enter finishes heal | 1.15.10 | ✓ | ✓ | n/a | n/a | |
 | Help sheet, version, licences, Ko-fi link | ≤1.1.1; 1.12.2 | ✓ | ✓ 1.17.0; version 1.17.6 | ✓ | ✓ | |
 | Zoom hint at the foot of the photo | ≤1.1.1 | ✓ | ? | ? | ✓ | |

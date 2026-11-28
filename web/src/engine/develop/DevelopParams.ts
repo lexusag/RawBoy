@@ -1,6 +1,7 @@
 import type { BwFilter } from '../color/BwFilter';
 import type { MaskLayer } from './Masks';
 import type { FilmLeak } from './FilmLeaks';
+import type { CensorLayer } from './Censor';
 import type { HealSpot } from './HealSpots';
 import type { LightEffect } from './LightEffects';
 import type { LightLeak } from './LightLeaks';
@@ -116,6 +117,8 @@ export const anamorphicBarOf = (c: AnamorphicColor): Float32Array => new Float32
  * - leaks: up to MAX_LEAKS light leaks over the finished picture (see LightLeaks.ts); per photo, like the masks.
  * - healSpots: up to MAX_HEAL_SPOTS healing brush spots (see HealSpots.ts), healed in the full-resolution image; per photo.
  * - fx: up to MAX_EFFECTS light effects (lightning, sparks, trails, swirls; LightEffects.ts) over the leaks; per photo.
+ * - censor: up to MAX_CENSOR_LAYERS censor layers (Artistic Paintbrush, see Censor.ts), applied to the source image
+ *   before anything develops it; per photo, never in presets.
  *
  * Whites/Blacks follow Lightroom: Blacks < 0 raises the black point (deeper blacks), Blacks > 0 lifts/fades
  * them; Whites > 0 lowers the white point (brighter whites), Whites < 0 dims them.
@@ -204,6 +207,7 @@ export interface DevelopParams {
   filmLeaks: readonly FilmLeak[];
   fx: readonly LightEffect[];
   healSpots: readonly HealSpot[];
+  censor: readonly CensorLayer[];
   /**
    * Editor sections (`EditSectionId`) switched off: their values stay here but render as the photo's defaults
    * (`effectiveParams`). Per photo: not carried to the next one, not in presets.
@@ -300,6 +304,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   filmLeaks: [],
   fx: [],
   healSpots: [],
+  censor: [],
   disabledSections: [],
 });
 

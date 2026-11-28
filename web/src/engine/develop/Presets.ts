@@ -101,7 +101,7 @@ export function capturePreset(name: string, params: DevelopParams, groups: reado
   const chosen = PRESET_GROUPS.filter((g) => groups.includes(g.key));
   for (const g of chosen) {
     for (const f of g.fields) {
-      if (f === 'leaks' || f === 'fx' || f === 'healSpots' || f === 'disabledSections') continue; // in no group: leaks, effects and healing spots stay with the photo
+      if (f === 'leaks' || f === 'fx' || f === 'healSpots' || f === 'censor' || f === 'disabledSections') continue; // in no group: leaks, effects and healing spots stay with the photo
       values[f] = f === 'masks' ? forPreset(params.masks) : params[f]; // strokes stay with the photo
     }
   }
@@ -187,7 +187,7 @@ export function layerPreset(under: Preset, over: Preset): Preset {
 
 /** True when params hold per-photo brush work (healing brush strokes, brush mask layers, or strokes on a mask). */
 export const hasBrush = (params: DevelopParams): boolean =>
-  params.healSpots.length > 0 || params.masks.some((l) => l.shape.kind === 'brush' || l.strokes.length > 0);
+  params.healSpots.length > 0 || (params.censor ?? []).length > 0 || params.masks.some((l) => l.shape.kind === 'brush' || l.strokes.length > 0);
 
 /** params with the preset's stored fields; a value of the wrong type (a hand-edited file) leaves the field. */
 export function applyPreset(preset: Preset, params: DevelopParams): DevelopParams {

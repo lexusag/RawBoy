@@ -7,6 +7,7 @@ import { developParams, type DevelopParams } from '../../engine/develop/DevelopP
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
 import { effectiveParams } from '../../engine/develop/EditSections';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
+import { MAX_CENSOR_LAYERS, MAX_CENSOR_POINTS, MAX_CENSOR_STROKES, newCensorLayer, type CensorEffect, type CensorLayer, type CensorStroke } from '../../engine/develop/Censor';
 import { MAX_EFFECTS, newLightEffect, type FxKind, type LightEffect } from '../../engine/develop/LightEffects';
 import { randomFilmLeak, randomFilmRoll, type FilmLeak, type FilmLeakType } from '../../engine/develop/FilmLeaks';
 import { MAX_HEAL_POINTS, MAX_HEAL_SPOTS, type HealSpot } from '../../engine/develop/HealSpots';
@@ -187,7 +188,7 @@ export class ProStore {
     }
   }
 
-  /** Edits carry over to the next file (and "Copy previous edits"). White balance only if the user changed it; rotation, flips, perspective, crop, masks, light leaks, effects and healing spots never. */
+  /** Edits carry over to the next file (and "Copy previous edits"). White balance only if the user changed it; rotation, flips, perspective, crop, masks, light leaks, effects, healing spots and censor layers never. */
   private mergeCarriedEdits(previous: { params: DevelopParams; defaults: DevelopParams }, base: DevelopParams, defaults: DevelopParams): DevelopParams {
     const p = withCrop(
       {
@@ -204,6 +205,7 @@ export class ProStore {
         filmLeaks: base.filmLeaks,
         fx: base.fx,
         healSpots: base.healSpots,
+        censor: base.censor,
         disabledSections: [],
       },
       cropOf(base),
@@ -697,6 +699,95 @@ export class ProStore {
   };
 
   clearBrush = (layerId: string) => this.updateLayer(layerId, (l) => ({ ...l, strokes: [] }), true);
+
+  /** Adds a censor layer (up to MAX_CENSOR_LAYERS); returns its id, or null when full. */
+  addCensor = (effect: CensorEffect = 'paint'): string | null => {
+    const p = this._state.params;
+    if (p.censor.length >= MAX_CENSOR_LAYERS) return null;
+    const layer = newCensorLayer(effect);
+    this.commit({ ...p, censor: [...p.censor, layer] }, true);
+    return layer.id;
+  };
+
+  /** A censor layer's slider or handle drag; [force] for a button. */
+  updateCensor = (id: string, change: (l: CensorLayer) => CensorLayer, force = false) => {
+    this.flushCensorStroke();
+    const p = this._state.params;
+    this.commit({ ...p, censor: p.censor.map((l) => (l.id === id ? change(l) : l)) }, force);
+  };
+
+  removeCensor = (id: string) => {
+    this.flushCensorStroke();
+    const p = this._state.params;
+    this.commit({ ...p, censor: p.censor.filter((l) => l.id !== id) }, true);
+    this.session.dropBrush(id);
+  };
+
+  /** Points (and pen widths) of the censor stroke being painted that haven't reached the params yet (one update per frame). */
+  private pendingCensor: { layerId: string; strokeId: string; points: number[]; widths: number[] } | null = null;
+  private censorFrame = 0;
+
+  /** Starts a stroke (one undo step for the whole stroke); false when the layer is full. */
+  beginCensorStroke = (layerId: string, stroke: CensorStroke): boolean => {
+    this.flushCensorStroke();
+    const layer = this._state.params.censor.find((l) => l.id === layerId);
+    if (!layer || layer.strokes.length >= MAX_CENSOR_STROKES) return false;
+    this.updateCensor(layerId, (l) => ({ ...l, strokes: [...l.strokes, stroke] }), true);
+    return true;
+  };
+
+  /** [widths]: one per point when the stroke has pen widths, else empty. */
+  extendCensorStroke = (layerId: string, strokeId: string, points: number[], widths: number[] = []) => {
+    const p = this.pendingCensor;
+    if (p && (p.layerId !== layerId || p.strokeId !== strokeId)) this.flushCensorStroke();
+    if (!this.pendingCensor) this.pendingCensor = { layerId, strokeId, points: [], widths: [] };
+    this.pendingCensor.points.push(...points);
+    this.pendingCensor.widths.push(...widths);
+    if (!this.censorFrame) this.censorFrame = requestAnimationFrame(() => this.flushCensorStroke());
+  };
+
+  endCensorStroke = () => this.flushCensorStroke();
+
+  private flushCensorStroke() {
+    cancelAnimationFrame(this.censorFrame);
+    this.censorFrame = 0;
+    const p = this.pendingCensor;
+    this.pendingCensor = null;
+    if (!p || p.points.length === 0) return;
+    const params = this._state.params;
+    this.show({
+      ...params,
+      censor: params.censor.map((l) =>
+        l.id !== p.layerId
+          ? l
+          : {
+              ...l,
+              strokes: l.strokes.map((s) => {
+                if (s.id !== p.strokeId) return s;
+                const room = MAX_CENSOR_POINTS * 2 - s.points.length;
+                if (room <= 0) return s;
+                const pts = p.points.slice(0, room);
+                return {
+                  ...s,
+                  points: [...s.points, ...pts],
+                  ...(s.widths ? { widths: [...s.widths, ...p.widths.slice(0, pts.length / 2)] } : {}),
+                };
+              }),
+            },
+      ),
+    });
+  }
+
+  /** Drops the stroke just begun, with no redo step (a second finger turned it into a pinch). */
+  cancelCensorStroke = () => {
+    this.flushCensorStroke();
+    const p = this.history.drop();
+    if (p) this.show(p);
+  };
+
+  undoCensorStroke = (layerId: string) => this.updateCensor(layerId, (l) => ({ ...l, strokes: l.strokes.slice(0, -1) }), true);
+
+  clearCensor = (layerId: string) => this.updateCensor(layerId, (l) => ({ ...l, strokes: [], ellipse: null }), true);
 
   private setPresets(presets: Preset[]) {
     this.set({ presets });
