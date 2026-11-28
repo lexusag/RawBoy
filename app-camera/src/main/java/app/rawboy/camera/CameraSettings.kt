@@ -145,9 +145,9 @@ data class CameraSettings(
     val street: Boolean = false,
     /**
      * Launching RawBoy Camera via a double press of the power button (`STILL_IMAGE_CAMERA` / `STILL_IMAGE_CAMERA_SECURE`)
-     * enters Street mode automatically for that session. On by default.
+     * enters Street mode automatically for that session. Off by default.
      */
-    val streetOnPowerLaunch: Boolean = true,
+    val streetOnPowerLaunch: Boolean = false,
     /**
      * Which camera opens on a double press of the power button (`STILL_IMAGE_CAMERA` / `STILL_IMAGE_CAMERA_SECURE`):
      * the back main `W` lens by default, another selected camera/lens, or [PowerLaunchCamera.Last] ("Last opened").
