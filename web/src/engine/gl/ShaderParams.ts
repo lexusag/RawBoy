@@ -18,6 +18,7 @@ import type { SkinMask } from '../retouch/SkinMask';
 import type { DepthMapData } from '../../worker/protocol';
 import type { BloomSources, PreviewImage } from './PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from './WaveletDenoise';
+import { packCensor, type CensorLookup, type CensorUniforms } from './CensorPass';
 import { ZoomMath } from './Zoom';
 
 /**
@@ -238,6 +239,8 @@ export class ShaderParams {
     readonly depthFalloff = 0.5,
     /** Edge softness `0..1` (`uDepthBlur.w`). */
     readonly depthEdge = 0.3,
+    /** Censor layers for the censor pre-pass (CensorPass), or null: nothing censored. */
+    readonly censor: CensorUniforms | null = null,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -284,6 +287,10 @@ export class ShaderParams {
     retouchMap: RetouchMap | null = null,
     /** Embedded depth map from the DNG (PhotoSession.depthMap), or null. */
     depthMap: DepthMapData | null = null,
+    /** Painted coverage of each censor layer (PhotoSession.censorRaster). */
+    censorFor: CensorLookup = () => null,
+    /** Whole-image copy the censor effects average (the session preview), or null: nothing censored. */
+    censorSource: PreviewImage | null = null,
   ): ShaderParams {
     const filmUsed = film && film.stock.id === p.film ? film : null;
     const sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature, asShot.tint);
@@ -293,16 +300,19 @@ export class ShaderParams {
     const depthFocus = Math.min(1, Math.max(0, (p.depthFocus ?? 20) / 100));
     const depthFalloff = Math.min(1, Math.max(0, (p.depthFalloff ?? 50) / 100));
     const depthEdge = Math.min(1, Math.max(0, (p.depthEdge ?? 30) / 100));
-    return new ShaderParams(
-      // White balance, then the RGB primaries adjustment, then the B&W filter; all 3x3 in linear Rec.2020.
-      Mat3.toGlColumnMajor(
-        Mat3.multiply(
-          bwFilterMatrix(p.bwFilter),
-          Mat3.multiply(Primaries.fromParams(p), WhiteBalance.rebalanceMatrix(sourceWhite, targetWhite)),
-        ),
+    // White balance, then the RGB primaries adjustment, then the B&W filter; all 3x3 in linear Rec.2020.
+    const whiteBalance = Mat3.toGlColumnMajor(
+      Mat3.multiply(
+        bwFilterMatrix(p.bwFilter),
+        Mat3.multiply(Primaries.fromParams(p), WhiteBalance.rebalanceMatrix(sourceWhite, targetWhite)),
       ),
-      2 ** (p.exposure + BASE_EXPOSURE_EV),
-      2 ** ((p.contrast / 100) * 0.7),
+    );
+    const exposure = 2 ** (p.exposure + BASE_EXPOSURE_EV);
+    const contrast = 2 ** ((p.contrast / 100) * 0.7);
+    return new ShaderParams(
+      whiteBalance,
+      exposure,
+      contrast,
       2 ** ((p.lumaContrast / 100) * 0.7) - 1,
       1 + p.saturation / 100,
       p.shadows / 100,
@@ -357,6 +367,7 @@ export class ShaderParams {
       depthFocus,
       depthFalloff,
       depthEdge,
+      packCensor(p.censor ?? [], lens.width, lens.height, censorFor, censorSource, whiteBalance, exposure, contrast),
     );
   }
 

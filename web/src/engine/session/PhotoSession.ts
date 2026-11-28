@@ -2,10 +2,13 @@ import { NO_NOISE, cameraMetered, type NoiseLevel } from '../auto/analysis/AutoT
 import { WhiteBalance } from '../color/WhiteBalance';
 import { WhitePicker, type WhitePick } from '../color/WhitePicker';
 import { BrushRaster, makeGuide, type BrushGuide } from '../develop/BrushRaster';
+import { censorHealSpots, type CensorLayer } from '../develop/Censor';
+import { CensorRaster } from '../develop/CensorRaster';
+import type { CensorLookup } from '../gl/CensorPass';
 import type { CropRect } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise, type DevelopParams } from '../develop/DevelopParams';
 import { effectiveParams } from '../develop/EditSections';
-import { healKey, healStrokes } from '../develop/HealSpots';
+import { healKey, healStrokes, type HealSpot } from '../develop/HealSpots';
 import { maxLayerRetouch, type MaskLayer } from '../develop/Masks';
 import { exportImage } from '../export/Exporter';
 import type { ExportSettings } from '../export/ExportSettings';
@@ -165,6 +168,8 @@ export class PhotoSession {
   private healedKey = '';
   /** Painted masks by layer id (see brushRaster). */
   private readonly brushes = new Map<string, BrushRaster>();
+  /** Censor layers' painted coverage by layer id (see censorRaster). */
+  private readonly censorRasters = new Map<string, CensorRaster>();
   private guide: BrushGuide | null = null;
   private guideSource: PreviewImage | null = null;
   /** Bumped to cancel a pending blemish run. */
@@ -264,6 +269,7 @@ export class PhotoSession {
     this.blemishSpots = null;
     this.healedKey = '';
     this.brushes.clear();
+    this.censorRasters.clear();
     this.guide = null;
     this.retouchRun++;
     this.retouchFor = null;
@@ -284,7 +290,7 @@ export class PhotoSession {
     });
     this.params = initialParams(defaults);
     this.ensureSkinMask();
-    if (this.params.healSpots.length) this.scheduleBlemishes(0); // restored from a sidecar
+    if (healSpotsOf(this.params).length) this.scheduleBlemishes(0); // restored from a sidecar
     this.ensureDepthMap();
     this.ensureBokehSource();
     this.ensureFlareSource();
@@ -297,7 +303,7 @@ export class PhotoSession {
     const before = this.params;
     this.params = newParams;
     if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 || retouchStrengthOf(newParams) > 0) this.ensureSkinMask();
-    if (newParams.blemishRemoval !== before.blemishRemoval || healKey(newParams.healSpots) !== healKey(before.healSpots)) this.scheduleBlemishes();
+    if (newParams.blemishRemoval !== before.blemishRemoval || healKey(healSpotsOf(newParams)) !== healKey(healSpotsOf(before))) this.scheduleBlemishes();
     if (retouchStrengthOf(newParams) !== retouchStrengthOf(before)) this.scheduleRetouch();
     this.ensureDepthMap();
     this.ensureBokehSource();
@@ -334,6 +340,26 @@ export class PhotoSession {
   /** Forgets a deleted layer's painted mask. */
   dropBrush(layerId: string) {
     this.brushes.delete(layerId);
+    this.censorRasters.delete(layerId);
+  }
+
+  /**
+   * The painted coverage of censor [layer] brought up to its strokes (only the changed spans while a stroke grows), or
+   * null without strokes. Rasters are the preview's size and live as long as the photo.
+   */
+  censorRaster(layer: CensorLayer): CensorRaster | null {
+    const preview = this._state.preview;
+    if (layer.strokes.length === 0 || !preview) {
+      this.censorRasters.delete(layer.id);
+      return null;
+    }
+    let r = this.censorRasters.get(layer.id);
+    if (!r || r.width !== preview.width || r.height !== preview.height) {
+      r = new CensorRaster(preview.width, preview.height);
+      this.censorRasters.set(layer.id, r);
+    }
+    r.sync(layer.strokes);
+    return r;
   }
 
   /** Auto mask guide, made from the preview the first time an Auto mask stroke needs it. */
@@ -359,6 +385,7 @@ export class PhotoSession {
     return ShaderParams.from(
       p, defaults, lut, this.lensFor(p), s.base, s.bloomSources, s.skin.kind === 'ready' ? s.skin.mask : null, 1, 1, maskView,
       (l) => this.brushRaster(l), film, s.bokehSource, s.flareSource, retouch, s.depthMap,
+      (l) => this.censorRaster(l), s.preview,
     );
   }
 
@@ -658,7 +685,7 @@ export class PhotoSession {
       const img = this.image;
       if (run !== this.blemishRun || !img) return;
       const level = this.params.blemishRemoval;
-      const brush = this.params.healSpots;
+      const brush = healSpotsOf(this.params);
       let wanted = new Float32Array(0);
       if (level > 0) {
         const skin = this._state.skin;
@@ -874,6 +901,21 @@ export function brushLookup(image: PreviewImage, layers: readonly MaskLayer[]): 
   return (l) => rasters.get(l.id) ?? null;
 }
 
+/** Censor layers' coverage rasterised on [image] (a whole-image copy) for a develop outside a session, as brushLookup. */
+export function censorLookup(image: PreviewImage, layers: readonly CensorLayer[]): CensorLookup {
+  const rasters = new Map<string, CensorRaster>();
+  for (const l of layers) {
+    if (!l.strokes.length) continue;
+    const r = new CensorRaster(image.width, image.height);
+    r.sync(l.strokes);
+    rasters.set(l.id, r);
+  }
+  return (l) => rasters.get(l.id) ?? null;
+}
+
+/** Every stroke healed in the full-resolution image: the healing brush's and the censor layers' Heal away. */
+export const healSpotsOf = (p: DevelopParams): HealSpot[] => [...p.healSpots, ...censorHealSpots(p.censor ?? [])];
+
 /** What exporting RawBoy edits needs besides the analysis's small copies (see editTexturesOf). */
 export interface EditTextures {
   brushFor: BrushLookup;
@@ -881,6 +923,9 @@ export interface EditTextures {
   bokehSource: PreviewImage | null;
   /** The anamorphic flare's source copy, or null when the flare is off. */
   flareSource: PreviewImage | null;
+  /** Censor layers' coverage and the copy their effects average (the session preview's size), or null: none. */
+  censorFor: CensorLookup;
+  censorSource: PreviewImage | null;
 }
 
 /**
@@ -892,8 +937,16 @@ export async function editTexturesOf(image: RawImage, p: DevelopParams): Promise
   const blurs = p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0);
   const bokehSource = blurs ? await image.createPreview(BOKEH_SOURCE_MAX_DIMENSION) : null;
   const flareSource = p.anamorphic > 0 ? makeFlareSource(await image.createPreview(FLARE_SOURCE_MAX_DIMENSION, true)) : null;
-  if (!p.masks.some((l) => l.strokes.length)) return { brushFor: () => null, bokehSource, flareSource };
-  return { brushFor: brushLookup(await image.createPreview(PREVIEW_MAX_DIMENSION), p.masks), bokehSource, flareSource };
+  const censors = (p.censor ?? []).some((l) => l.enabled && l.effect !== 'heal');
+  const painted = p.masks.some((l) => l.strokes.length);
+  const preview = censors || painted ? await image.createPreview(PREVIEW_MAX_DIMENSION) : null;
+  return {
+    brushFor: preview && painted ? brushLookup(preview, p.masks) : () => null,
+    bokehSource,
+    flareSource,
+    censorFor: preview && censors ? censorLookup(preview, p.censor) : () => null,
+    censorSource: censors ? preview : null,
+  };
 }
 
 /**

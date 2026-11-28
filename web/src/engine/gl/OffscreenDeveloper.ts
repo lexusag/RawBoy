@@ -3,6 +3,7 @@ import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
 import { ScanUpscaler } from './ScanUpscaler';
 import { WaveletDenoise } from './WaveletDenoise';
+import { placementOf, type InputPlacement } from './CensorPass';
 import { rect, type PixelRect } from './Zoom';
 
 /**
@@ -66,7 +67,7 @@ export class OffscreenDeveloper {
     this.inputs.bind(params);
     gl.bindTexture(gl.TEXTURE_2D, this.inputTexture);
     uploadHalfRgb(gl, inRect.width, inRect.height, input);
-    let texture = this.denoised(params, inRect.width, inRect.height, 1);
+    let texture = this.censored(params, this.denoised(params, inRect.width, inRect.height, 1), inRect.width, inRect.height, { x: inRect.x, y: inRect.y, scaleX: 1, scaleY: 1 });
     let texW = inRect.width;
     let texH = inRect.height;
     if (scale > 1) {
@@ -94,7 +95,7 @@ export class OffscreenDeveloper {
       preview.width, preview.height, rect(0, 0, preview.fullWidth, preview.fullHeight),
       rect(0, 0, params.lens.outputWidth, params.lens.outputHeight), preview.fullWidth, preview.fullHeight,
     );
-    return this.draw(params, geometry, width, height, this.denoised(params, preview.width, preview.height, preview.width / preview.fullWidth));
+    return this.draw(params, geometry, width, height, this.censored(params, this.denoised(params, preview.width, preview.height, preview.width / preview.fullWidth), preview.width, preview.height, placementOf(preview)));
   }
 
   /**
@@ -112,7 +113,12 @@ export class OffscreenDeveloper {
     const geometry = new SampleGeometry(
       preview.width, preview.height, rect(0, 0, preview.fullWidth, preview.fullHeight), region, preview.fullWidth, preview.fullHeight,
     );
-    return this.draw(params, geometry, width, height, this.denoised(params, preview.width, preview.height, preview.width / preview.fullWidth));
+    return this.draw(params, geometry, width, height, this.censored(params, this.denoised(params, preview.width, preview.height, preview.width / preview.fullWidth), preview.width, preview.height, placementOf(preview)));
+  }
+
+  /** [texture] through the censor pre-pass (CensorPass) when censor layers are on. */
+  private censored(p: ShaderParams, texture: WebGLTexture, width: number, height: number, at: InputPlacement): WebGLTexture {
+    return this.inputs.censor.apply(p.censor, 'export', texture, `u${this.uploads}`, width, height, at);
   }
 
   /** The input texture, or its copy through the wavelet denoise pre-pass when denoise is on (see WaveletDenoise). */

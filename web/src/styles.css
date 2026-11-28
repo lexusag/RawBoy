@@ -2262,6 +2262,59 @@ line.curve-grid,
   font-size: 13px;
 }
 
+/* Censor panel: brush colour row (Auto, swatch, hex, Pick) and recent colours. */
+.censor-colour {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0;
+}
+.censor-colour-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.censor-colour-label {
+  font-size: 12px;
+  min-width: 48px;
+}
+.censor-colour-row button.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.censor-colour input[type='color'] {
+  width: 32px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border, #444);
+  background: none;
+  cursor: pointer;
+}
+.censor-hex {
+  width: 76px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+.censor-recent {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.censor-swatch {
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+}
+.censor-swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* Light leaks panel: compact create bar, layer list, and grouped inspector. */
 .leak-create {
   display: flex;

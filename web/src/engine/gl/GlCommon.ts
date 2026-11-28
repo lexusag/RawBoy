@@ -13,6 +13,7 @@ import type { ShaderParams } from './ShaderParams';
 import { SCAN_GRAIN } from './ScanScale';
 import { Shaders } from './Shaders';
 import { BokehTexture, bokehUniforms, type BokehGeometry } from './BokehTexture';
+import { CensorPass, imageKey, placementOf } from './CensorPass';
 import { flareCoarseRows, flareRows } from './FlareSource';
 import { computeGuidedDepth } from './GuidedDepth';
 import type { PixelRect } from './Zoom';
@@ -415,6 +416,19 @@ export class ImageTexture {
     gl.activeTexture(gl.TEXTURE0);
   }
 
+  /** The uploaded copy's texture (the censor pre-pass reads it). */
+  get texture(): WebGLTexture {
+    return this.id;
+  }
+
+  /** Binds [texture] (a processed copy of this one, e.g. censored) to this unit in its place. */
+  bindInstead(texture: WebGLTexture) {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0 + this.unit);
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
   release() {
     this.gl.deleteTexture(this.id);
   }
@@ -682,8 +696,11 @@ export class DevelopInputs {
   readonly film: FilmTextures;
   readonly bokeh: BokehTexture;
   readonly fx: FxTexture;
+  /** The censor pre-pass: also run over the base and bloom halo copies, so nothing read around a pixel is uncensored. */
+  readonly censor: CensorPass;
 
   constructor(gl: WebGL2RenderingContext) {
+    this.censor = new CensorPass(gl);
     this.base = new ImageTexture(gl, Units.BASE);
     this.halo = new ImageTexture(gl, Units.BLOOM_HALO);
     this.tail = new ImageTexture(gl, Units.BLOOM_TAIL);
@@ -694,7 +711,7 @@ export class DevelopInputs {
     this.lut = new LutTexture(gl);
     this.brush = new BrushTexture(gl);
     this.film = new FilmTextures(gl);
-    this.bokeh = new BokehTexture(gl);
+    this.bokeh = new BokehTexture(gl, this.censor);
     this.fx = new FxTexture(gl);
   }
 
@@ -703,6 +720,13 @@ export class DevelopInputs {
     this.shading.bind(p.lens.info.shading);
     this.base.bind(p.base);
     this.halo.bind(p.bloomHalo);
+    if (this.censor.active(p.censor)) {
+      // Clarity, the extend-canvas fill and bloom read these copies around a pixel: censor them too.
+      for (const [t, img, role] of [[this.base, p.base, 'base'], [this.halo, p.bloomHalo, 'halo']] as const) {
+        if (!img) continue;
+        t.bindInstead(this.censor.apply(p.censor, role, t.texture, imageKey(img), img.width, img.height, placementOf(img)));
+      }
+    }
     this.tail.bind(p.bloomTail);
     this.flare.bind(p.flareSource);
     this.skin.bind(p.skinMask, p.retouchMap && (p.skinFix !== 0 || p.layers.retouch.some((v) => v > 0)) ? p.retouchMap : null);
@@ -714,7 +738,7 @@ export class DevelopInputs {
   }
 
   release() {
-    for (const t of [this.base, this.halo, this.tail, this.flare, this.skin, this.depth, this.shading, this.lut, this.brush, this.film, this.bokeh, this.fx]) t.release();
+    for (const t of [this.base, this.halo, this.tail, this.flare, this.skin, this.depth, this.shading, this.lut, this.brush, this.film, this.bokeh, this.fx, this.censor]) t.release();
   }
 }
 

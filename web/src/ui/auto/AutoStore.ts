@@ -26,7 +26,9 @@ import { analysisLanes, analysisWorker } from '../../engine/raw/RawWorker';
 import type { SkinMask } from '../../engine/retouch/SkinMask';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import { healStrokes } from '../../engine/develop/HealSpots';
-import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession, PREVIEW_MAX_DIMENSION, type Prepared } from '../../engine/session/PhotoSession';
+import { blemishesToHeal, brushLookup, censorLookup, editTexturesOf, healSpotsOf, PhotoSession, PREVIEW_MAX_DIMENSION, type Prepared } from '../../engine/session/PhotoSession';
+import type { CensorLookup } from '../../engine/gl/CensorPass';
+import type { CensorLayer } from '../../engine/develop/Censor';
 import { retouchMap } from '../../engine/retouch/PortraitRetouch';
 import { maxLayerRetouch, type MaskLayer } from '../../engine/develop/Masks';
 import { segmentSkin } from '../../engine/retouch/SkinSegmenter';
@@ -491,6 +493,7 @@ export class AutoStore {
   private readonly thumbTimers = new Map<string, number>();
   /** Painted masks of RawBoy edits on the analysis's base, by the edits' mask list (see smallShader). */
   private readonly brushes = new WeakMap<readonly MaskLayer[], BrushLookup>();
+  private readonly censors = new WeakMap<readonly CensorLayer[], CensorLookup>();
   /** Each photo's edits, for Undo and Redo in the photo view. */
   private readonly histories = new Map<string, EditHistory<Develop>>();
   /** Settings read back from photos' sidecars; analysis waits for them, so it keeps their looks. */
@@ -1395,8 +1398,14 @@ export class AutoStore {
       brushFor = this.brushes.get(params.masks) ?? brushLookup(a.base, params.masks);
       this.brushes.set(params.masks, brushFor);
     }
+    let censorFor: CensorLookup = () => null;
+    if ((params.censor ?? []).some((l) => l.strokes.length)) {
+      censorFor = this.censors.get(params.censor) ?? censorLookup(a.base, params.censor);
+      this.censors.set(params.censor, censorFor);
+    }
     return ShaderParams.from(
       params, a.defaults, lut, new LensTransform(a.lens, params), a.base, a.bloom, a.skin, 1, 1, null, brushFor, film, a.base,
+      null, null, null, censorFor, a.base,
     );
   }
 
@@ -1674,7 +1683,7 @@ export class AutoStore {
       // A preset's Blemish removal heals the full-resolution image, as the detail view does.
       // RawBoy edits' healing brush spots go in with it.
       const auto = params.blemishRemoval > 0 && skin?.hasSkin ? blemishesToHeal(await img.detectBlemishes(skin), params.blemishRemoval) : null;
-      if (auto || params.healSpots.length) await img.healBlemishes(auto ?? new Float32Array(0), healStrokes(params.healSpots, img.width, img.height));
+      if (auto || healSpotsOf(params).length) await img.healBlemishes(auto ?? new Float32Array(0), healStrokes(healSpotsOf(params), img.width, img.height));
       // RawBoy edits' painted masks and lens blur, made from the healed image as the detail view makes them.
       const textures = await editTexturesOf(img, params);
       // Portrait retouch's map from the session preview's size, as the detail view makes it.
@@ -1683,7 +1692,7 @@ export class AutoStore {
       // The stored 512/128 px copies were made from this same file, so they match.
       const shader = ShaderParams.from(
         params, a.defaults, lut, new LensTransform(img.lens, params), a.base, a.bloom, skin, 1, 1, null, textures.brushFor, film,
-        textures.bokehSource, textures.flareSource, retouch,
+        textures.bokehSource, textures.flareSource, retouch, null, textures.censorFor, textures.censorSource,
       );
       return await exportImage(img, shader, settings, onProgress);
     } finally {

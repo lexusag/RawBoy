@@ -13,6 +13,10 @@ import { MasksPanel, radiusToSize, sizeToRadius } from './MasksPanel';
 import { FxPanel } from './FxPanel';
 import { LeaksPanel } from './LeaksPanel';
 import { HealOverlay } from './HealOverlay';
+import { CensorOverlay, type CensorBrush, type CensorTool } from './CensorOverlay';
+import { CensorPanel, DEFAULT_CENSOR_BRUSH, censorBrushSize, rememberCensorColour } from './CensorPanel';
+import { colourHex } from '../../engine/develop/Censor';
+import { samplePreview, sceneToDisplay } from '../../engine/develop/CensorColour';
 import { HealPanel, healSize, type HealBrush } from './HealPanel';
 import { DEFAULT_HEAL_FEATHER, HEAL_RADIUS_MAX, HEAL_RADIUS_MIN, newHealSpot } from '../../engine/develop/HealSpots';
 import { LookSelector } from './LookSelector';
@@ -105,6 +109,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [leaksMode, setLeaksMode] = useState(false);
   const [fxMode, setFxMode] = useState(false);
   const [healMode, setHealMode] = useState(false);
+  const [censorMode, setCensorMode] = useState(false);
   // White balance picker: armed from the Color tab, the next click on the photo picks.
   const [pickingWhite, setPickingWhite] = useState(false);
   // Focus depth picker: armed from the Detail tab (Portrait blur), the next click on the photo picks depthFocus.
@@ -116,7 +121,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     setPickingWhite(false);
     setPickingDepth(false);
     setAutoWb(false);
-  }, [geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode, state.fileName]);
+  }, [geometryMode, masksMode, leaksMode, fxMode, healMode, censorMode, presetsMode, state.fileName]);
   useEffect(() => {
     if (state.controlsTab !== 'Color') {
       setPickingWhite(false);
@@ -136,13 +141,13 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   useEffect(() => {
     setLooksArmed(false);
     setLooksAt(null);
-  }, [geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode, autoWb, state.fileName]);
+  }, [geometryMode, masksMode, leaksMode, fxMode, healMode, censorMode, presetsMode, autoWb, state.fileName]);
   // Esc puts down the active tool (white picker, depth picker, auto WB rectangle, Looks, Crop & rotate, Masks, Leaks, Light effects,
   // Presets), one per press. Not while typing, over a dialog (they handle Esc themselves) or when something else
   // already took the key.
   const exportOpen = useRef(false);
-  const escState = useRef({ pickingWhite, pickingDepth, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode });
-  escState.current = { pickingWhite, pickingDepth, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode };
+  const escState = useRef({ pickingWhite, pickingDepth, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, censorMode, presetsMode });
+  escState.current = { pickingWhite, pickingDepth, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, censorMode, presetsMode };
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -163,6 +168,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       else if (k.leaksMode) setLeaksMode(false);
       else if (k.fxMode) setFxMode(false);
       else if (k.healMode) setHealMode(false);
+      else if (k.censorMode) setCensorMode(false);
       else if (k.presetsMode) setPresetsMode(false);
       else return;
       e.preventDefault();
@@ -184,6 +190,9 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [selectedLeak, setSelectedLeak] = useState<string | null>(null);
   const [selectedFx, setSelectedFx] = useState<string | null>(null);
   const [selectedHeal, setSelectedHeal] = useState<string | null>(null);
+  const [selectedCensor, setSelectedCensor] = useState<string | null>(null);
+  const [censorTool, setCensorTool] = useState<CensorTool>('paint');
+  const [censorBrush, setCensorBrush] = useState<CensorBrush>(DEFAULT_CENSOR_BRUSH);
   const [healBrush, setHealBrush] = useState<HealBrush>({ radius: 0.008, feather: DEFAULT_HEAL_FEATHER, chooseSource: false, offset: [0.04, 0] });
   const [showMask, setShowMask] = useState(false);
   const [showExport, setShowExport] = useState(false);
@@ -200,6 +209,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     setSelectedLeak(null);
     setSelectedFx(null);
     setSelectedHeal(null);
+    setSelectedCensor(null);
   }, [state.fileName]);
   // Keep a layer selected while there are any (after a delete, or a preset brought new ones).
   const layers = state.params.masks;
@@ -211,9 +221,12 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const effects = state.params.fx;
   const healSpots = state.params.healSpots;
   const healId = healSpots.some((h) => h.id === selectedHeal) ? selectedHeal : null;
+  const censorLayers = state.params.censor;
+  const censorId = censorLayers.some((l) => l.id === selectedCensor) ? selectedCensor : (censorLayers[censorLayers.length - 1]?.id ?? null);
+  const censorLayer = censorLayers.find((l) => l.id === censorId) ?? null;
   const fxId = effects.some((e) => e.id === selectedFx) ? selectedFx : (effects[effects.length - 1]?.id ?? null);
   // Overlay handles, also beyond the photo, in either tool.
-  const shapesMode = masksMode || leaksMode || fxMode || healMode;
+  const shapesMode = masksMode || leaksMode || fxMode || healMode || censorMode;
   // Crop and Auto WB work on the fit view only; masks work at 100% too (frame-colour clicks stay off while masking).
   const zoomable = !geometryMode && !autoWb;
   const maskMargin = useMediaQuery('(max-width: 560px)') ? MASK_MARGIN_NARROW : MASK_MARGIN;
@@ -237,6 +250,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       if (!geometryMode && store.session.state.zoomCenter) store.session.exitZoom();
       setGeometryMode(!geometryMode);
       setHealMode(false);
+      setCensorMode(false);
       setPresetsMode(false);
       setMasksMode(false);
       setLeaksMode(false);
@@ -397,6 +411,97 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masksMode, store]);
 
+  // Censor (X toggles it from any tool but Masks, whose keys are its own).
+  const openCensor = (open: boolean) => {
+    setCensorMode(open);
+    setHealMode(false);
+    setFxMode(false);
+    setGeometryMode(false);
+    setPresetsMode(false);
+    setMasksMode(false);
+    setLeaksMode(false);
+    if (open && censorTool === 'pick') setCensorTool('paint');
+  };
+  const censorToggle = useRef({ open: openCensor, censorMode, usable: false });
+  censorToggle.current = { open: openCensor, censorMode, usable: hasImage && !busy };
+  useEffect(() => {
+    if (masksMode) return;
+    const down = (e: KeyboardEvent) => {
+      if (shortcutKey(e) !== 'x' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return;
+      const t = e.target;
+      if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
+      if (!isTabShown('pro') || !censorToggle.current.usable) return;
+      if (document.querySelector('[role="dialog"], [aria-modal="true"], dialog[open]')) return;
+      e.preventDefault();
+      censorToggle.current.open(!censorToggle.current.censorMode);
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [masksMode]);
+
+  /** The eyedropper: the photo's colour, as it develops, at image fractions (x, y) becomes the brush colour. */
+  const pickCensorColour = (x: number, y: number) => {
+    const preview = session.preview;
+    if (!preview || !shaderParams) return;
+    const hex = colourHex(sceneToDisplay(samplePreview(preview, x, y), shaderParams.whiteBalance, shaderParams.exposure, shaderParams.contrast));
+    rememberCensorColour(hex);
+    setCensorBrush({ ...censorBrush, colour: hex });
+    setCensorTool('paint');
+  };
+  /** Image fractions at the middle of what the preview shows (a new ellipse goes there). */
+  const viewCentre = (): [number, number] => {
+    if (!shaderParams) return [0.5, 0.5];
+    const lens = shaderParams.lens;
+    const c = session.zoomCenter ?? [lens.outputWidth / 2, lens.outputHeight / 2];
+    const src = lens.source(c[0], c[1]);
+    return [Math.min(1, Math.max(0, src[0] / lens.width)), Math.min(1, Math.max(0, src[1] / lens.height))];
+  };
+
+  // Censor keys: P paint, E erase, I pick a colour, [ ] brush size, Enter finishes, Space pans.
+  const censorKeys = useRef({ censorBrush, censorLayer });
+  censorKeys.current = { censorBrush, censorLayer };
+  useEffect(() => {
+    if (!censorMode) return;
+    const typing = (t: EventTarget | null) =>
+      t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox');
+    const down = (e: KeyboardEvent) => {
+      if (!isTabShown('pro') || typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = censorKeys.current;
+      const key = shortcutKey(e);
+      const heal = k.censorLayer?.effect === 'heal';
+      if (key === ' ') {
+        setSpaceHeld(true);
+      } else if (key === 'p') {
+        setCensorTool('paint');
+      } else if (key === 'e' && !heal) {
+        setCensorTool('erase');
+      } else if (key === 'i' && !heal) {
+        setCensorTool('pick');
+      } else if (key === '[' || key === ']') {
+        const size = censorBrushSize.to(k.censorBrush.radius) + (key === ']' ? 4 : -4);
+        setCensorBrush({ ...k.censorBrush, radius: censorBrushSize.from(Math.min(100, Math.max(0, size))) });
+      } else if (e.key === 'Enter' && !e.shiftKey && !e.repeat && !(e.target instanceof HTMLButtonElement)) {
+        setCensorMode(false);
+      } else {
+        return;
+      }
+      e.preventDefault();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === ' ') setSpaceHeld(false);
+    };
+    const blur = () => setSpaceHeld(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
+      setSpaceHeld(false);
+    };
+  }, [censorMode]);
+
   // B opens (or closes) the Healing brush from any other tool; inside Masks it stays that tool's brush.
   const healToggle = useRef({ healMode, usable: false });
   healToggle.current = { healMode, usable: hasImage && !busy };
@@ -409,6 +514,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       if (!isTabShown('pro') || !healToggle.current.usable) return;
       e.preventDefault();
       setHealMode(!healToggle.current.healMode);
+      setCensorMode(false);
       setFxMode(false);
       setGeometryMode(false);
       setPresetsMode(false);
@@ -508,6 +614,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             if (!geometryMode && session.zoomCenter) store.session.exitZoom(); // the crop tool works on the fit view
             setGeometryMode(!geometryMode);
             setHealMode(false);
+            setCensorMode(false);
             setPresetsMode(false);
             setMasksMode(false);
             setLeaksMode(false);
@@ -523,6 +630,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           onClick={() => {
             setPresetsMode(!presetsMode);
             setHealMode(false);
+            setCensorMode(false);
             setGeometryMode(false);
             setMasksMode(false);
             setLeaksMode(false);
@@ -540,6 +648,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           onClick={() => {
             setMasksMode(!masksMode);
             setHealMode(false);
+            setCensorMode(false);
             setGeometryMode(false);
             setPresetsMode(false);
             setLeaksMode(false);
@@ -557,6 +666,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           onClick={() => {
             setLeaksMode(!leaksMode);
             setHealMode(false);
+            setCensorMode(false);
             setFxMode(false);
             setGeometryMode(false);
             setPresetsMode(false);
@@ -574,6 +684,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           onClick={() => {
             setFxMode(!fxMode);
             setHealMode(false);
+            setCensorMode(false);
             setGeometryMode(false);
             setPresetsMode(false);
             setMasksMode(false);
@@ -590,6 +701,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           title="Healing brush (B): remove dust, blemishes and small objects"
           onClick={() => {
             setHealMode(!healMode);
+            setCensorMode(false);
             setFxMode(false);
             setGeometryMode(false);
             setPresetsMode(false);
@@ -600,6 +712,16 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
         >
           <HealIcon />
           <span className="tool-label">Heal</span>
+        </button>
+        <button
+          type="button"
+          className={`icon${censorMode ? ' active' : ''}`}
+          title="Censor (X): cover parts of the photo with paint, mosaic, smear, frosted glass or ink"
+          onClick={() => openCensor(!censorMode)}
+          disabled={!hasImage || busy}
+        >
+          <CensorIcon />
+          <span className="tool-label">Censor</span>
         </button>
         <button type="button" className="icon" title="Undo (Ctrl/⌘ Z)" aria-label="Undo" onClick={store.undo} disabled={!state.canUndo || busy}>
           <UndoIcon />
@@ -807,6 +929,41 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               }}
             />
           )}
+          {censorMode && !showOriginal && shaderParams && (
+            <CensorOverlay
+              lens={shaderParams.lens}
+              layer={censorLayer}
+              tool={censorLayer?.effect === 'heal' ? 'paint' : censorTool}
+              brush={censorBrush}
+              frame={FRAME_WIDTH + maskMargin}
+              zoomFrame={FRAME_WIDTH}
+              zoomCenter={session.zoomCenter}
+              zoomScale={session.zoomScale}
+              passThrough={spaceHeld}
+              onBegin={(stroke) => {
+                let id = censorId;
+                if (!id) {
+                  id = store.addCensor('paint');
+                  if (!id) return false;
+                  setSelectedCensor(id);
+                }
+                return store.beginCensorStroke(id, stroke);
+              }}
+              onExtend={(strokeId, pts, widths) => censorId && store.extendCensorStroke(censorId, strokeId, pts, widths)}
+              onEnd={store.endCensorStroke}
+              onCancel={store.cancelCensorStroke}
+              onEllipse={(ellipse, force) => {
+                let id = censorId;
+                if (!id) {
+                  id = store.addCensor('paint');
+                  if (!id) return;
+                  setSelectedCensor(id);
+                }
+                store.updateCensor(id, (l) => ({ ...l, ellipse }), force);
+              }}
+              onPick={pickCensorColour}
+            />
+          )}
           {looksArmed && looksAt && !showOriginal && (
             <LookSelector
               key={state.fileName ?? ''}
@@ -956,6 +1113,27 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                   setSelectedHeal(null);
                 }}
                 onDone={() => setHealMode(false)}
+              />
+            ) : censorMode ? (
+              <CensorPanel
+                layers={censorLayers}
+                selectedId={censorId}
+                tool={censorTool}
+                brush={censorBrush}
+                healing={session.blemish.working}
+                onSelect={setSelectedCensor}
+                onTool={setCensorTool}
+                onBrush={setCensorBrush}
+                onAdd={(effect) => {
+                  const id = store.addCensor(effect);
+                  if (id) setSelectedCensor(id);
+                }}
+                onUpdate={store.updateCensor}
+                onRemove={store.removeCensor}
+                onUndoStroke={store.undoCensorStroke}
+                onClear={store.clearCensor}
+                viewCentre={viewCentre}
+                onDone={() => setCensorMode(false)}
               />
             ) : presetsMode ? (
               <PresetsPanel
@@ -1169,6 +1347,18 @@ function MasksIcon() {
       <path d="M3 12h18" strokeOpacity={0.6} />
       <path d="M3 16h18" strokeOpacity={0.3} />
       <circle cx={15} cy={14} r={4} fill="currentColor" stroke="none" fillOpacity={0.5} />
+    </svg>
+  );
+}
+
+/** Censor: a brush over a mosaic square. */
+function CensorIcon() {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }} aria-hidden="true">
+      <rect x={3} y={3} width={11} height={11} rx={1} />
+      <path d="M8.5 3v11M3 8.5h11" strokeWidth={1.2} strokeOpacity={0.6} />
+      <path d="M20.5 9.5l-7.5 7.5" />
+      <path d="M13 17c-1.5 0-3 1.2-3 3.5 2.3 0 3.5-1.5 3.5-3" fill="currentColor" />
     </svg>
   );
 }

@@ -3,6 +3,7 @@ import BOKEH_GATHER from '../../../../shaders/bokeh_gather.frag?raw';
 import BOKEH_PREP from '../../../../shaders/bokeh_prep.glsl?raw';
 import { floatToHalf } from '../util/half';
 import { DevelopProgram, FullscreenQuad, Units, createProgram, createTexture } from './GlCommon';
+import { imageKey, placementOf, type CensorPass } from './CensorPass';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
 import { Shaders } from './Shaders';
@@ -97,7 +98,7 @@ export class BokehTexture {
   private key = '';
   private readonly supported: boolean;
 
-  constructor(private readonly gl: WebGL2RenderingContext) {
+  constructor(private readonly gl: WebGL2RenderingContext, private readonly censor: CensorPass | null = null) {
     this.supported = gl.getExtension('EXT_color_buffer_float') != null;
     this.prep = new DevelopProgram(gl, false, Shaders.fragmentWithMain(BOKEH_PREP));
     this.gather = createProgram(gl, DENOISE_VERT, BOKEH_GATHER);
@@ -136,9 +137,12 @@ export class BokehTexture {
       this.uploaded = src;
       this.key = '';
     }
+    // Censored areas are blurred from their censored copy, never from the original.
+    const input = this.censor ? this.censor.apply(p.censor, 'bokeh', this.source, imageKey(src), src.width, src.height, placementOf(src), true) : this.source;
+    const censorStamp = input === this.source || !p.censor ? '' : `${p.censor.key}@${p.censor.rasters.map((r) => r?.version ?? -1).join(',')}`;
     const l = p.layers;
     const brushVersions = l.brush.map((r) => (r ? `${r.width}x${r.height}@${r.version}` : '-'));
-    const key = JSON.stringify([g.width, g.height, l.count, [...l.geom], [...l.shape], [...l.color], [...l.blur], brushVersions, p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge, p.base ? p.base.width : 0, depthId(p.depthMap)]);
+    const key = JSON.stringify([censorStamp, g.width, g.height, l.count, [...l.geom], [...l.shape], [...l.color], [...l.blur], brushVersions, p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge, p.base ? p.base.width : 0, depthId(p.depthMap)]);
     if (key === this.key) return;
 
     if (g.width !== this.width || g.height !== this.height) {
@@ -157,7 +161,7 @@ export class BokehTexture {
     // 1. Masks -> radius, premultiplied source.
     gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.radii, 0);
     gl.activeTexture(gl.TEXTURE0 + UNIT_PASS);
-    gl.bindTexture(gl.TEXTURE_2D, this.source);
+    gl.bindTexture(gl.TEXTURE_2D, input);
     this.prep.bindMasks(p, src.fullWidth, src.fullHeight);
     this.prep.bokehPrep(UNIT_PASS, Math.max(0, Math.log2(Math.max(src.width, src.height) / Math.max(g.width, g.height))), g);
     this.quad.draw();

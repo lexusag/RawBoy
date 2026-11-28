@@ -1,5 +1,6 @@
 import type { DevelopParams } from './DevelopParams';
 import { parseFilmLeaks, type FilmLeak } from './FilmLeaks';
+import { censorForEdits, parseCensor } from './Censor';
 import { parseHealSpots, type HealSpot } from './HealSpots';
 import { parseEffects, type LightEffect } from './LightEffects';
 import { parseLeaks, type LightLeak } from './LightLeaks';
@@ -31,6 +32,7 @@ const valuesOf = (params: DevelopParams): Record<string, unknown> => {
     filmLeaks: params.filmLeaks.map(({ id: _id, ...l }: FilmLeak) => l),
     fx: params.fx.map(({ id: _id, ...l }: LightEffect) => l),
     healSpots: params.healSpots.map(({ id: _id, ...l }: HealSpot) => l),
+    censor: censorForEdits(params.censor ?? []),
   };
 };
 
@@ -55,7 +57,7 @@ export function decodeEdits(text: string, defaults: DevelopParams): DevelopParam
   }
   if (!parsed || typeof parsed !== 'object' || (parsed as { format?: unknown }).format !== EDITS_FORMAT) return null;
   const raw = (parsed as { values?: unknown }).values;
-  const { masks, leaks, filmLeaks, fx, healSpots, flipHorizontal, flipVertical, disabledSections, ...values } = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const { masks, leaks, filmLeaks, fx, healSpots, censor, flipHorizontal, flipVertical, disabledSections, ...values } = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const p = applyPreset({ id: '', name: '', groups: [], values: values as never }, defaults);
   return {
     ...p,
@@ -67,6 +69,7 @@ export function decodeEdits(text: string, defaults: DevelopParams): DevelopParam
     filmLeaks: filmLeaks === undefined ? defaults.filmLeaks : parseFilmLeaks(filmLeaks),
     fx: fx === undefined ? defaults.fx : parseEffects(fx),
     healSpots: healSpots === undefined ? defaults.healSpots : parseHealSpots(healSpots),
+    censor: censor === undefined ? defaults.censor : parseCensor(censor),
     disabledSections: Array.isArray(disabledSections) ? EDIT_SECTIONS.filter((s) => disabledSections.includes(s)) : defaults.disabledSections,
   };
 }
