@@ -773,9 +773,9 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             let exposureSeconds: Float = rawDur.isFinite && rawDur > 0 ? Float(rawDur) : 0
             let focusing = device.isAdjustingFocus
             let format = device.activeFormat
-            let isoRange = format.minISO...max(format.minISO, format.maxISO)
+            let isoRange = format.minISO...Swift.max(format.minISO, format.maxISO)
             let expMin = Int64((format.minExposureDuration.seconds * 1e9).rounded(.up))
-            let expMax = max(expMin, Int64((format.maxExposureDuration.seconds * 1e9).rounded(.down)))
+            let expMax = Swift.max(expMin, Int64((format.maxExposureDuration.seconds * 1e9).rounded(.down)))
             stateLock.withLock {
                 state.isoRange = isoRange
                 state.exposureRangeNs = expMin...expMax
