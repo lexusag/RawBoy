@@ -2,7 +2,7 @@ import { NO_NOISE, cameraMetered, type NoiseLevel } from '../auto/analysis/AutoT
 import { WhiteBalance } from '../color/WhiteBalance';
 import { WhitePicker, type WhitePick } from '../color/WhitePicker';
 import { BrushRaster, makeGuide, type BrushGuide } from '../develop/BrushRaster';
-import { censorHealSpots, type CensorLayer } from '../develop/Censor';
+import type { CensorLayer } from '../develop/Censor';
 import { CensorRaster } from '../develop/CensorRaster';
 import type { CensorLookup } from '../gl/CensorPass';
 import type { CropRect } from '../develop/CropMath';
@@ -914,7 +914,7 @@ export function censorLookup(image: PreviewImage, layers: readonly CensorLayer[]
 }
 
 /** Every stroke healed in the full-resolution image: the healing brush's and the censor layers' Heal away. */
-export const healSpotsOf = (p: DevelopParams): HealSpot[] => [...p.healSpots, ...censorHealSpots(p.censor ?? [])];
+export const healSpotsOf = (p: DevelopParams): readonly HealSpot[] => p.healSpots;
 
 /** What exporting RawBoy edits needs besides the analysis's small copies (see editTexturesOf). */
 export interface EditTextures {
@@ -937,7 +937,7 @@ export async function editTexturesOf(image: RawImage, p: DevelopParams): Promise
   const blurs = p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0);
   const bokehSource = blurs ? await image.createPreview(BOKEH_SOURCE_MAX_DIMENSION) : null;
   const flareSource = p.anamorphic > 0 ? makeFlareSource(await image.createPreview(FLARE_SOURCE_MAX_DIMENSION, true)) : null;
-  const censors = (p.censor ?? []).some((l) => l.enabled && l.effect !== 'heal');
+  const censors = (p.censor ?? []).some((l) => l.enabled);
   const painted = p.masks.some((l) => l.strokes.length);
   const preview = censors || painted ? await image.createPreview(PREVIEW_MAX_DIMENSION) : null;
   return {
