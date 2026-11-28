@@ -67,7 +67,7 @@ class CameraSettingsTest {
             depthPortrait = true, showHistogram = true, showGrid = true, showLevel = true,
             showZoomControl = true, lens = "UW", film = false,
         )
-        assertTrue(pro.streetOnPowerLaunch)
+        assertFalse(pro.streetOnPowerLaunch)
         assertTrue(pro.streetZsl)
         // Ephemeral Street session overrides without mutating settings.street.
         val s = pro.effectiveFor(streetActive = true)
