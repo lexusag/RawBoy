@@ -9,7 +9,8 @@
 // input's neighbours, so no spatialMargin.
 //
 // Our own method (no third-party code): every effect starts from the photo averaged over cells at least the effect's
-// Size, so no detail of what is covered survives, then draws its look on top (paint dabs, tiles, smear, glass, ink).
+// Size, so no detail of what is covered survives, then draws its look on top (oil strokes, tiles, smear, glass, print
+// dots, hatching, a dry ink brush). The edge falls off smoothly with the brush's own coverage.
 precision highp float;
 precision highp int;
 precision highp sampler2D;
@@ -26,10 +27,11 @@ uniform vec2 uImageSize;         // full-resolution image size (px)
 uniform vec2 uSourceSize;        // uCensorSource level 0 size (texels)
 uniform int uCensorCount;
 uniform vec4 uCensorSlot[MAX_CENSOR];    // atlas origin.xy, size.zw (uv); size 0 = no strokes
-uniform vec4 uCensorKind[MAX_CENSOR];    // effect (0 paint, 1 mosaic, 2 smear, 3 glass, 4 ink), edge (0 soft, 1 painted, 2 hard), mosaic shape, seed
+uniform vec4 uCensorKind[MAX_CENSOR];    // effect (0 oil paint, 1 mosaic, 2 smear, 3 glass, 4 halftone, 5 hatching, 6 ink brush), 0, mosaic shape, seed
 uniform vec4 uCensorParam[MAX_CENSOR];   // effect size (full-res px), strength 0..1, has ellipse, 0
 uniform vec4 uCensorEllipse[MAX_CENSOR]; // centre (full-res px), 1 / radii (px)
 uniform vec4 uCensorTurn[MAX_CENSOR];    // ellipse cos, sin of its angle; soft edge (fraction of the radius); 0
+uniform vec4 uCensorExtra[MAX_CENSOR];   // mosaic glass colour, halftone/hatching contrast, hatching keep colour (0..1); 0
 // The develop's main steps, to turn a picked display colour into the scene light that develops to about it.
 uniform mat3 uInvWhiteBalance;
 uniform float uExposure;
@@ -127,21 +129,33 @@ float agxInverse(float y) {
     }
     return 0.5 * (lo + hi);
 }
-vec3 displayToScene(vec3 srgb) {
+const float MIN_EV = -12.47393;
+const float MAX_EV = 4.026069;
+const float PIVOT = (-2.4739311883324122 - MIN_EV) / (MAX_EV - MIN_EV);
+// "Display" here = the AgX curve's output (Rec.2020, 2.2 encoded): what the print effects draw in.
+vec3 dispToScene(vec3 disp) {
+    disp = clamp(disp, 0.004, 0.99);
+    vec3 x = vec3(agxInverse(disp.r), agxInverse(disp.g), agxInverse(disp.b));
+    x = (x - PIVOT) / max(uContrast, 0.05) + PIVOT;
+    vec3 scene = exp2(x * (MAX_EV - MIN_EV) + MIN_EV) / max(uExposure, 1e-4);
+    return max(uInvWhiteBalance * scene, 0.0);
+}
+vec3 sceneToDisp(vec3 scene) {
+    vec3 c = inverse(uInvWhiteBalance) * scene * uExposure;
+    vec3 x = (log2(max(c, vec3(1e-10))) - MIN_EV) / (MAX_EV - MIN_EV);
+    x = clamp((x - PIVOT) * uContrast + PIVOT, 0.0, 1.0);
+    return clamp(vec3(agxCurve(x.r), agxCurve(x.g), agxCurve(x.b)), 0.0, 1.0);
+}
+vec3 srgbToDisp(vec3 srgb) {
     vec3 lin = mix(srgb / 12.92, pow((srgb + 0.055) / 1.055, vec3(2.4)), step(0.04045, srgb));
     const mat3 REC709_TO_REC2020 = mat3(
         vec3(0.6274040, 0.0690970, 0.0163916),
         vec3(0.3292820, 0.9195400, 0.0880132),
         vec3(0.0433136, 0.0113612, 0.8955950));
-    vec3 c = REC709_TO_REC2020 * lin;
-    vec3 disp = clamp(pow(max(c, 0.0), vec3(1.0 / 2.2)), 0.004, 0.99);
-    const float MIN_EV = -12.47393;
-    const float MAX_EV = 4.026069;
-    const float PIVOT = (-2.4739311883324122 - MIN_EV) / (MAX_EV - MIN_EV);
-    vec3 x = vec3(agxInverse(disp.r), agxInverse(disp.g), agxInverse(disp.b));
-    x = (x - PIVOT) / max(uContrast, 0.05) + PIVOT;
-    vec3 scene = exp2(x * (MAX_EV - MIN_EV) + MIN_EV) / max(uExposure, 1e-4);
-    return max(uInvWhiteBalance * scene, 0.0);
+    return pow(max(REC709_TO_REC2020 * lin, 0.0), vec3(1.0 / 2.2));
+}
+vec3 displayToScene(vec3 srgb) {
+    return dispToScene(srgbToDisp(srgb));
 }
 // Small random shifts of a cell's colour: value +-10%, a little per channel, so cell values aren't a plain average.
 vec3 jitter(vec3 c, vec4 h) {
@@ -153,52 +167,53 @@ vec3 cellColour(vec2 centre, float size) {
 }
 
 // ---- effects: the colour, and the detail factor the brush colour keeps ----
-vec4 paint(int i, vec2 p, float size, float seed) {
+// Rounded rectangle distance (negative inside).
+float sdBox(vec2 q, vec2 b, float r) {
+    vec2 d = abs(q) - b + r;
+    return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - r;
+}
+// Direction along the picture's contours (across its coarse light gradient), radians.
+float flowAngle(vec2 p, float s) {
+    float gx = log2(dot(coarse(p + vec2(s, 0.0), s), LUMA) + 1e-4) - log2(dot(coarse(p - vec2(s, 0.0), s), LUMA) + 1e-4);
+    float gy = log2(dot(coarse(p + vec2(0.0, s), s), LUMA) + 1e-4) - log2(dot(coarse(p - vec2(0.0, s), s), LUMA) + 1e-4);
+    return atan(gy, gx) + 0.5 * PI;
+}
+// Oil paint: two coats of long bristle strokes laid along the form, the top-most stroke covering the pixel wins; their
+// ends break up like a dry brush.
+vec4 paint(vec2 p, float size, float seed) {
     vec3 col = cellColour(p, size * 2.0);
     float detail = 1.0;
-    // Two coats: big strokes, then smaller ones over them; the top-most dab covering the pixel wins.
     for (int layer = 0; layer < 2; layer++) {
-        float cs = size * (layer == 0 ? 1.3 : 0.85);
+        float cs = size * (layer == 0 ? 1.0 : 0.65);
+        float hl = cs * 1.2;  // half length
+        float hw = cs * 0.375; // half width
         float ls = seed + float(layer) * 31.0;
         vec2 cell = floor(p / cs);
         float best = -1.0;
-        vec3 bestCol = vec3(0.0);
-        float bestDetail = 1.0;
-        for (int dy = -1; dy <= 1; dy++) {
-            for (int dx = -1; dx <= 1; dx++) {
+        for (int dy = -2; dy <= 2; dy++) {
+            for (int dx = -2; dx <= 2; dx++) {
                 vec2 id = cell + vec2(float(dx), float(dy));
                 vec4 h = hash4(id, ls);
-                vec2 c = (id + 0.3 + 0.4 * h.xy) * cs;
-                float a = angleAt(i, c, size, seed) + (h.z - 0.5) * 0.5;
+                if (h.w <= best) continue;
+                vec2 c = (id + h.xy) * cs;
+                if (distance(p, c) > hl + hw) continue;
+                float a = flowAngle(c, cs * 2.0) + (h.z - 0.5) * 0.5;
                 vec2 d = p - c;
                 vec2 q = vec2(cos(a) * d.x + sin(a) * d.y, -sin(a) * d.x + cos(a) * d.y);
-                float hl = cs * (0.9 + 0.2 * h.w);
-                float hw = cs * (0.42 + 0.16 * h.z);
-                // A dab: square-ish body, round ends, a bristle-ragged tail.
-                float bristle = valueNoise(vec2(q.y / (hw * 0.25), h.x * 40.0), ls);
-                float u = q.x / hl;
-                float v = q.y / hw;
-                float e = pow(abs(u), 2.5) * (1.0 + 0.45 * bristle) + pow(abs(v), 2.2);
-                if (e >= 1.0) continue;
-                float pr = h.w + float(layer);
-                if (pr <= best) continue;
-                best = pr;
-                bestCol = jitter(cellColour(c, cs), h.wzyx) * (vec3(0.95) + 0.1 * h.xzy);
-                // Bristle streaks along the dab, a light impasto ridge at its rim, a value shift per dab.
-                float streak = valueNoise(vec2(q.x / (hl * 0.7), q.y / (hw * 0.12)), ls + 5.0);
-                float ridge = smoothstep(0.6, 1.0, e);
-                bestDetail = (0.94 + 0.12 * streak) * (1.0 - 0.06 * ridge) * (0.92 + 0.16 * h.y);
+                float t = q.x / hl;
+                if (sdBox(q, vec2(hl, hw * (1.0 - 0.25 * t * t)), hw * 0.9) > 0.5) continue;
+                float bristle = valueNoise(vec2(q.y / (hw * 0.14), h.y * 50.0), ls + 3.0);
+                if (smoothstep(0.55, 1.0, abs(t)) * (1.0 - bristle) > 0.35) continue;
+                best = h.w;
+                col = jitter(cellColour(c, cs * 0.9), h.wzyx);
+                detail = 0.9 + 0.2 * bristle;
             }
-        }
-        if (best >= 0.0) {
-            col = bestCol;
-            detail = bestDetail;
         }
     }
     return vec4(col * detail, detail);
 }
 
-vec4 mosaic(vec2 p, float size, float seed, float shape, float texel) {
+vec4 mosaic(vec2 p, float size, float seed, float shape, float texel, float glassColour) {
     vec2 centre;
     float edge;
     vec4 h;
@@ -234,6 +249,15 @@ vec4 mosaic(vec2 p, float size, float seed, float shape, float texel) {
         h = hash4(id1, seed);
     }
     vec3 col = jitter(cellColour(centre, size), h);
+    if (glassColour > 0.0) {
+        // Coloured glass: each piece tinted its own vivid hue at the same brightness, like stained glass over the photo.
+        float hue = fract(h.x * 7.13 + h.w * 3.7);
+        vec3 k = clamp(abs(mod(hue * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+        vec3 tint = pow(mix(vec3(1.0), k, 0.75 + 0.2 * h.z), vec3(2.2));
+        tint = min(tint / max(dot(tint, LUMA), 0.05), vec3(4.0));
+        col *= mix(vec3(1.0), tint, glassColour);
+        col *= 0.95 + 0.1 * valueNoise(p / max(size * 0.22, 1.0), seed + 9.0 + h.z * 10.0);
+    }
     // Grout between tiles (anti-aliased over a texel), a slight glaze towards each tile's middle, fine texture.
     float aa = max(texel, 1.0);
     float grout = smoothstep(size * 0.035, size * 0.035 + aa, edge);
@@ -284,23 +308,67 @@ vec4 glass(vec2 p, float size, float seed) {
     return vec4(col * detail, detail);
 }
 
-vec4 ink(vec2 p, float size, float seed) {
-    vec3 col = mix(coarse(p, size * 4.0), coarse(p, size * 12.0), 0.5);
-    float density = 0.95 + 0.1 * fbm(p / (size * 2.0), seed + 5.0);
-    float paper = 0.97 + 0.06 * fbm(p / max(size * 0.06, 1.0), seed + 8.0);
-    float detail = density * paper;
-    return vec4(col * detail, detail);
+// Halftone: the area printed as CMYK dots on paper (screens at their usual angles), [contrast] = how far from the
+// area's own colour the print goes. Drawn in display values, so the dots look like print.
+vec4 halftone(vec2 p, float size, float contrast) {
+    float cs = size * 0.5;
+    vec3 outc = srgbToDisp(vec3(0.97, 0.95, 0.9));
+    for (int k = 0; k < 4; k++) {
+        float ang = k == 0 ? 0.26 : k == 1 ? 1.31 : k == 2 ? 0.0 : 0.785;
+        float ca = cos(ang);
+        float sa = sin(ang);
+        vec2 q = vec2(ca * p.x + sa * p.y, -sa * p.x + ca * p.y);
+        vec2 id = floor(q / cs);
+        vec2 qc = (id + 0.5) * cs;
+        vec2 cc = vec2(ca * qc.x - sa * qc.y, sa * qc.x + ca * qc.y);
+        vec3 s = sceneToDisp(cellColour(cc, cs));
+        float K = (1.0 - max(s.r, max(s.g, s.b))) * 0.6;
+        vec3 cmy = (1.0 - s - K) / max(1.0 - K, 1e-3);
+        float ink = k == 0 ? cmy.r : k == 1 ? cmy.g : k == 2 ? cmy.b : K;
+        float r = sqrt(clamp(ink, 0.0, 1.0)) * cs * 0.58;
+        float a = smoothstep(r + 1.0, r - 1.0, distance(q, qc));
+        vec3 inkc = k == 0 ? vec3(0.0, 0.68, 0.94) : k == 1 ? vec3(0.93, 0.0, 0.55) : k == 2 ? vec3(1.0, 0.92, 0.0) : vec3(0.15);
+        outc *= mix(vec3(1.0), srgbToDisp(inkc), a);
+    }
+    vec3 area = sceneToDisp(cellColour(p, cs * 2.0));
+    vec3 d = mix(area, outc, contrast);
+    return vec4(dispToScene(d), clamp(dot(d, LUMA) / max(dot(area, LUMA), 0.05), 0.2, 1.2));
 }
-
-// How much of the layer shows at coverage [cov]: plain (soft), thresholded against paper-and-bristle noise (painted:
-// a dry-brush rim), or a crisp anti-aliased edge (hard).
-float edgeAlpha(float cov, float edge, vec2 p, float size, float seed) {
-    if (cov <= 0.0) return 0.0;
-    if (edge < 0.5) return cov;
-    if (edge > 1.5) return smoothstep(0.42, 0.58, cov);
-    float n = fbm(p / (size * 0.35), seed + 41.0) * 0.7 + valueNoise(p / max(size * 0.05, 1.0), seed + 43.0) * 0.3;
-    float t = 0.12 + 0.76 * n;
-    return smoothstep(t - 0.06, t + 0.06, cov);
+// Hatching: pen lines in up to three directions, more of them where the area is darker. [contrast] = how dark the lines
+// are, [keep] = how much of the area's colour the paper and the lines keep (0: dark ink on light paper).
+vec4 hatching(vec2 p, float size, float seed, float contrast, float keep) {
+    vec3 c = sceneToDisp(cellColour(p, size * 0.9));
+    float L = dot(c, LUMA);
+    vec3 cream = 1.0 - (1.0 - sceneToDisp(coarse(p, size * 4.0))) * 0.3;
+    vec3 paper = mix(cream, 1.0 - (1.0 - sceneToDisp(coarse(p, size * 2.0))) * 0.8, keep);
+    vec3 inkc = mix(srgbToDisp(vec3(0.12, 0.1, 0.1)), c * c * 0.6, keep);
+    float sp = size * 0.28;
+    float ink = 0.0;
+    for (int k = 0; k < 3; k++) {
+        float th = k == 0 ? 0.8 : k == 1 ? 0.55 : 0.32;
+        if (L > th) continue;
+        float ang = k == 0 ? 0.785 : k == 1 ? -0.785 : 0.0;
+        vec2 q = vec2(cos(ang) * p.x + sin(ang) * p.y, -sin(ang) * p.x + cos(ang) * p.y);
+        float wob = (valueNoise(vec2(q.x / (size * 1.5), floor(q.y / sp)), seed + float(k)) - 0.5) * sp * 0.4;
+        float v = abs(fract((q.y + wob) / sp) - 0.5) * sp;
+        float w = sp * 0.16 * (1.0 + (th - L) * 1.5);
+        ink = max(ink, smoothstep(w + 1.0, w - 1.0, v));
+    }
+    vec3 d = mix(paper, inkc, ink * contrast);
+    return vec4(dispToScene(d), clamp(dot(d, LUMA) / max(dot(paper, LUMA), 0.05), 0.2, 1.2));
+}
+// Ink brush: a flat coat of ink (near black, or the brush colour) with dry-brush streaks along the stroke; the streaks
+// open up where the coverage falls off, so the edge breaks into bristle marks instead of fading.
+vec4 inkBrush(int i, vec2 p, float size, float seed, float cov, out float alpha) {
+    float a = angleAt(i, p, size, seed);
+    vec2 dir = vec2(cos(a), sin(a));
+    vec2 across = vec2(-dir.y, dir.x);
+    float streak = valueNoise(vec2(dot(p, across) / (size * 0.05), dot(p, dir) / (size * 6.0)), seed);
+    float fine = valueNoise(vec2(dot(p, across) / (size * 0.015), dot(p, dir) / (size * 2.0)), seed + 3.0);
+    float dry = 1.0 - smoothstep(0.0, 0.9, cov);
+    alpha = smoothstep(dry - 0.05, dry + 0.05, streak * 0.7 + fine * 0.3 + 0.1);
+    float detail = 0.9 + 0.2 * fine;
+    return vec4(displayToScene(vec3(0.05)) * detail, detail);
 }
 
 void main() {
@@ -316,14 +384,18 @@ void main() {
         vec4 par = uCensorParam[i];
         float size = par.x;
         float seed = kind.w;
-        float alpha = edgeAlpha(cov, kind.y, p, size, seed) * par.y;
-        if (alpha <= 0.0) continue;
+        vec4 extra = uCensorExtra[i];
+        float alpha = cov;
         vec4 e;
-        if (kind.x < 0.5) e = paint(i, p, size, seed);
-        else if (kind.x < 1.5) e = mosaic(p, size, seed, kind.z, uInputRect.z);
+        if (kind.x < 0.5) e = paint(p, size, seed);
+        else if (kind.x < 1.5) e = mosaic(p, size, seed, kind.z, uInputRect.z, extra.x);
         else if (kind.x < 2.5) e = smear(i, p, size, seed);
         else if (kind.x < 3.5) e = glass(p, size, seed);
-        else e = ink(p, size, seed);
+        else if (kind.x < 4.5) e = halftone(p, size, extra.y);
+        else if (kind.x < 5.5) e = hatching(p, size, seed, extra.y, extra.z);
+        else e = inkBrush(i, p, size, seed, cov, alpha);
+        alpha *= par.y;
+        if (alpha <= 0.0) continue;
         vec3 eff = e.rgb;
         vec4 brush = colourAt(i, p / uImageSize);
         if (brush.a > 0.002) {

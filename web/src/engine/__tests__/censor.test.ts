@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   activeCensorLayers,
-  censorHealSpots,
+  CENSOR_DEFAULT_SIZES,
   colourHex,
   MAX_CENSOR_LAYERS,
   newCensorLayer,
   parseCensor,
   parseColour,
+  withCensorEffect,
   type CensorLayer,
   type CensorStroke,
 } from '../develop/Censor';
@@ -127,19 +128,19 @@ describe('censor layers', () => {
     expect(parseCensor(Array.from({ length: 9 }, () => ({})))).toHaveLength(MAX_CENSOR_LAYERS);
   });
 
-  it('draws only enabled, covering, strong layers on the GPU and heals Heal away ones', () => {
-    const layers = [
-      layer({}),
-      layer({ enabled: false }),
-      layer({ strength: 0 }),
-      layer({ strokes: [] }),
-      layer({ effect: 'heal', strokes: [stroke([0.2, 0.2, 0.3, 0.3])] }),
-    ];
+  it('draws only enabled, covering, strong layers', () => {
+    const layers = [layer({}), layer({ enabled: false }), layer({ strength: 0 }), layer({ strokes: [] })];
     expect(activeCensorLayers(layers)).toHaveLength(1);
-    const heal = censorHealSpots(layers);
-    expect(heal).toHaveLength(1);
-    expect(heal[0].path).toEqual([0.3, 0.3]);
-    expect(heal[0].source).toBeNull();
+  });
+
+  it('opens retired effects as current ones and switches to an effect with its own size', () => {
+    const parsed = parseCensor([{ effect: 'ink', strokes: [] }, { effect: 'heal', strokes: [] }, { effect: 'hatching', contrast: 30, keepColour: 140 }]);
+    expect(parsed.map((l) => l.effect)).toEqual(['glass', 'paint', 'hatching']);
+    expect(parsed[2].contrast).toBe(30);
+    expect(parsed[2].keepColour).toBe(100);
+    const oil = withCensorEffect(newCensorLayer('mosaic'), 'paint');
+    expect(oil.size).toBe(CENSOR_DEFAULT_SIZES.paint);
+    expect(oil.name).toBe('Oil paint');
   });
 
   it('packs sizes in full-resolution pixels', () => {
@@ -150,6 +151,8 @@ describe('censor layers', () => {
     expect(u.ellipse[0]).toBe(2000);
     expect(u.ellipse[2]).toBeCloseTo(1 / 400, 8);
     expect(u.turn[0]).toBeCloseTo(0, 6);
+    const glass = packCensor([layer({ glassColour: 40, contrast: 20, keepColour: 80 })], 4000, 3000, () => null, src, IDENTITY, 1, 1)!;
+    expect(Array.from(glass.extra.slice(0, 3))).toEqual([0.4, 0.2, 0.8].map(Math.fround));
     expect(packCensor([layer({})], 4000, 3000, () => null, null, IDENTITY, 1, 1)).toBeNull();
   });
 });

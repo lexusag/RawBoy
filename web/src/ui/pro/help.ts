@@ -83,9 +83,9 @@ export const PRO_HELP: HelpSection[] = [
   {
     title: 'Censor',
     items: [
-      { how: 'Paint on the photo', text: 'Covers what you paint with the layer\'s effect (Paint, Mosaic, Smear, Frosted glass, Ink or Heal away), so it can be posted. The effect replaces the picture there completely, before any other edit; preview and export match. Up to 4 layers; each can also have an ellipse (drag one out with the Ellipse tool, then move, size and turn it by its dots).' },
-      { how: 'Effect size, Strength, Edge', text: 'Effect size is the size of the dabs, tiles or smear. Keep Strength at 100: below it some of the original shows through. Edge: soft, painted (ragged, brushed) or hard. New pattern lays the effect out anew.' },
-      { how: 'Brush', text: 'Brush size, Hardness and Smoothing (the line trails the pointer and comes out steadier) apply to new strokes. A pen\'s pressure changes the brush size; its eraser end erases.' },
+      { how: 'Paint on the photo', text: 'Covers what you paint with the layer\'s effect (Oil paint, Mosaic, Smear, Frosted glass, Halftone, Hatching or Ink brush), so it can be posted. The effect replaces the picture there completely, before any other edit; preview and export match. Up to 4 layers; each can also have an ellipse (drag one out with the Ellipse tool, then move, size and turn it by its dots).' },
+      { how: 'Effect size, Strength', text: 'Effect size is the size of the strokes, tiles, dots or lines. Keep Strength at 100: below it some of the original shows through. Mosaic\'s Glass colour tints the pieces like coloured glass; Halftone and Hatching have Contrast, and Hatching\'s Keep colour draws in the area\'s colours. New pattern lays the effect out anew.' },
+      { how: 'Brush', text: 'Brush size, Hardness (how wide the smooth edge is) and Smoothing (the line trails the pointer and comes out steadier) apply to new strokes. A pen\'s pressure changes the brush size; its eraser end erases.' },
       { how: 'Colour', text: 'Auto keeps the area\'s own colours; pick a colour with the swatch, a hex value, Pick (the eyedropper on the photo) or a recent colour, and Colour mix sets how far the effect moves towards it.' },
       { keys: ['X'], text: 'Open or close Censor' },
       { keys: ['P', 'E', 'I'], text: 'Paint, Erase, Pick a colour' },

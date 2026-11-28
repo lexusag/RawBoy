@@ -468,14 +468,13 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       if (!isTabShown('pro') || typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
       const k = censorKeys.current;
       const key = shortcutKey(e);
-      const heal = k.censorLayer?.effect === 'heal';
       if (key === ' ') {
         setSpaceHeld(true);
       } else if (key === 'p') {
         setCensorTool('paint');
-      } else if (key === 'e' && !heal) {
+      } else if (key === 'e') {
         setCensorTool('erase');
-      } else if (key === 'i' && !heal) {
+      } else if (key === 'i') {
         setCensorTool('pick');
       } else if (key === '[' || key === ']') {
         const size = censorBrushSize.to(k.censorBrush.radius) + (key === ']' ? 4 : -4);
@@ -933,7 +932,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             <CensorOverlay
               lens={shaderParams.lens}
               layer={censorLayer}
-              tool={censorLayer?.effect === 'heal' ? 'paint' : censorTool}
+              tool={censorTool}
               brush={censorBrush}
               frame={FRAME_WIDTH + maskMargin}
               zoomFrame={FRAME_WIDTH}
@@ -1120,7 +1119,6 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                 selectedId={censorId}
                 tool={censorTool}
                 brush={censorBrush}
-                healing={session.blemish.working}
                 onSelect={setSelectedCensor}
                 onTool={setCensorTool}
                 onBrush={setCensorBrush}

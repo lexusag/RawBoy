@@ -3,7 +3,6 @@ import DENOISE_VERT from '../../../../shaders/denoise.vert?raw';
 import { Mat3 } from '../color/Mat3';
 import {
   activeCensorLayers,
-  CENSOR_EDGE_ID,
   CENSOR_EFFECT_ID,
   MAX_CENSOR_LAYERS,
   MOSAIC_SHAPE_ID,
@@ -24,6 +23,7 @@ export interface CensorUniforms {
   param: Float32Array; // MAX x vec4: size px, strength, has ellipse, 0
   ellipse: Float32Array; // MAX x vec4: centre px, 1 / radii px
   turn: Float32Array; // MAX x vec4: cos, sin, soft edge, 0
+  extra: Float32Array; // MAX x vec4: glass colour, contrast, keep colour (0..1), 0
   rasters: (CensorRaster | null)[];
   /** Whole-image copy the effects average (the session preview). */
   source: PreviewImage;
@@ -58,6 +58,7 @@ export function packCensor(
     param: new Float32Array(MAX_CENSOR_LAYERS * 4),
     ellipse: new Float32Array(MAX_CENSOR_LAYERS * 4),
     turn: new Float32Array(MAX_CENSOR_LAYERS * 4),
+    extra: new Float32Array(MAX_CENSOR_LAYERS * 4),
     rasters: [],
     source,
     invWhiteBalance: invertColumnMajor(whiteBalance),
@@ -67,7 +68,8 @@ export function packCensor(
   };
   used.forEach((l, i) => {
     const o = i * 4;
-    u.kind.set([CENSOR_EFFECT_ID[l.effect], CENSOR_EDGE_ID[l.edge], MOSAIC_SHAPE_ID[l.mosaicShape], l.seed], o);
+    u.kind.set([CENSOR_EFFECT_ID[l.effect], 0, MOSAIC_SHAPE_ID[l.mosaicShape], l.seed], o);
+    u.extra.set([(l.glassColour ?? 0) / 100, (l.contrast ?? 50) / 100, (l.keepColour ?? 60) / 100, 0], o);
     u.param.set([Math.max(2, l.size * long), l.strength / 100, l.ellipse ? 1 : 0, 0], o);
     if (l.ellipse) {
       const e = l.ellipse;
@@ -82,7 +84,7 @@ export function packCensor(
   });
   u.key = [
     width, height, exposure, contrast, Array.from(u.invWhiteBalance).join(','),
-    Array.from(u.kind).join(','), Array.from(u.param).join(','), Array.from(u.ellipse).join(','), Array.from(u.turn).join(','),
+    Array.from(u.kind).join(','), Array.from(u.param).join(','), Array.from(u.ellipse).join(','), Array.from(u.turn).join(','), Array.from(u.extra).join(','),
   ].join('|');
   return u;
 }
@@ -244,6 +246,7 @@ export class CensorPass {
     gl.uniform4fv(this.u('uCensorParam'), c.param);
     gl.uniform4fv(this.u('uCensorEllipse'), c.ellipse);
     gl.uniform4fv(this.u('uCensorTurn'), c.turn);
+    gl.uniform4fv(this.u('uCensorExtra'), c.extra);
     gl.uniformMatrix3fv(this.u('uInvWhiteBalance'), false, c.invWhiteBalance);
     gl.uniform1f(this.u('uExposure'), c.exposure);
     gl.uniform1f(this.u('uContrast'), c.contrast);
