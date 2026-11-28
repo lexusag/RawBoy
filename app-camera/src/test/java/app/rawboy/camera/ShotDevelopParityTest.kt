@@ -43,7 +43,7 @@ class ShotDevelopParityTest {
             }
         }
         return modes.flatMap {
-            listOf(it, it.copy(grain = false), it.copy(strength = 60f, brightness = 20f, warmth = -15f))
+            listOf(it, it.copy(grain = false), it.copy(strength = 60f, exposureEv = 2f / 3f, warmth = -15f))
         }
     }
 
@@ -100,7 +100,7 @@ class ShotDevelopParityTest {
     private fun oldDevelopLook(s: CameraSettings, base: DevelopParams, hasFace: Boolean): DevelopParams {
         val bw = s.monoMode
         val adjust = Adjustments(
-            brightness = s.brightness,
+            brightness = s.exposureEv / LookApplier.BRIGHTNESS_EV * 100f,
             warmth = if (bw) 0f else s.warmth,
             contrast = if (s.filmMono) CameraSettings.FILM_MONO_CONTRAST else 0f,
         )

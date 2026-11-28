@@ -28,7 +28,11 @@ import java.util.Locale
 data class CameraSettings(
     val lookId: String = Edition.defaultLookId,
     val strength: Float = LookApplier.DEFAULT_STRENGTH,
-    val brightness: Float = 0f,
+    /**
+     * Exposure compensation (EV, -3..+3 in thirds), as on a camera in P mode: AE meters at 0, the viewfinder adds it in
+     * the develop, and a still is exposed this much brighter or darker by hand ([app.rawboy.camera.capture.ExposureProgram]).
+     */
+    val exposureEv: Float = 0f,
     val warmth: Float = 0f,
     /**
      * B&W mode ([Edition.monoLooks]): the photo is black and white, on [monoLookId]'s stock seen through
@@ -39,7 +43,7 @@ data class CameraSettings(
     val monoLookId: String = Edition.defaultMonoLookId,
     /**
      * Film mode (the Film toggle, [Edition.filmLooks]): colour photos on [filmLookId]'s film stock instead of
-     * [lookId]'s LUT look. Each mode keeps its own pick; Strength, Brightness and Warmth are shared. B&W mode wins over it,
+     * [lookId]'s LUT look. Each mode keeps its own pick; Strength, Exposure and Warmth are shared. B&W mode wins over it,
      * but leaves it on, so leaving B&W comes back to it. On by default (owner's choice, 2026-10-31).
      */
     val film: Boolean = true,
@@ -68,6 +72,8 @@ data class CameraSettings(
      * W lens with the default look and sliders. Output settings and calibration are always kept.
      */
     val rememberLast: Boolean = false,
+    /** The shutter speed and ISO the camera is metering, over the viewfinder (always on in Street mode). Off by default. */
+    val showExposureInfo: Boolean = false,
     /** A live RGB histogram in a corner of the viewfinder. */
     val showHistogram: Boolean = false,
     /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
@@ -283,7 +289,7 @@ data class CameraSettings(
     private fun developLook(base: DevelopParams, hasFace: Boolean, noise: NoiseProfile): DevelopParams {
         val bw = monoMode
         val adjust = Adjustments(
-            brightness = brightness,
+            brightness = exposureEv / LookApplier.BRIGHTNESS_EV * 100f,
             warmth = if (bw) 0f else warmth,
             contrast = if (filmMono) FILM_MONO_CONTRAST else 0f,
         )
@@ -305,9 +311,6 @@ data class CameraSettings(
             saturation = if (punch) (p.saturation + LOOK_SATURATION).coerceAtMost(100f) else p.saturation,
         )
     }
-
-    /** Exposure compensation (EV) set by the Brightness slider (`brightness` in -100..+100 -> -3.0..+3.0 EV). */
-    val exposureCompensationEv: Float get() = brightness / 100f * LookApplier.BRIGHTNESS_EV
 
     /** The long side to save at, or null for full size. */
     val maxLongSide: Int? get() = if (smallExport) SMALL_LONG_SIDE else null
@@ -346,7 +349,7 @@ data class CameraSettings(
             monoLookId = Edition.defaultMonoLookId,
             filter = BwFilter.YELLOW,
             strength = LookApplier.DEFAULT_STRENGTH,
-            brightness = 0f,
+            exposureEv = 0f,
             warmth = 0f,
             burstMode = BurstMode.OFF,
             flash = FlashMode.OFF,
@@ -374,7 +377,7 @@ data class CameraSettings(
             monoLookId = Edition.defaultMonoLookId,
             filter = BwFilter.YELLOW,
             strength = LookApplier.DEFAULT_STRENGTH,
-            brightness = 0f,
+            exposureEv = 0f,
             warmth = 0f,
             burstMode = BurstMode.AUTO,
             selfTimer = 0,
@@ -388,6 +391,7 @@ data class CameraSettings(
             saveDepth = false,
             depthPortrait = false,
             showHistogram = false,
+            showExposureInfo = false,
             showGrid = false,
             showLevel = false,
             showZoomControl = false,
@@ -420,6 +424,19 @@ data class CameraSettings(
     fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides, language = language)
 
     companion object {
+        /** Exposure's range (EV) either side of 0. */
+        const val EXPOSURE_RANGE_EV = 3f
+
+        /** Exposure's steps per EV (thirds, as cameras step). */
+        const val EXPOSURE_STEPS_PER_EV = 3
+
+        /** [ev] on Exposure's scale: the nearest third within ±[EXPOSURE_RANGE_EV]. */
+        fun snapExposure(ev: Float): Float {
+            if (!ev.isFinite()) return 0f
+            val steps = kotlin.math.round(ev.coerceIn(-EXPOSURE_RANGE_EV, EXPOSURE_RANGE_EV) * EXPOSURE_STEPS_PER_EV)
+            return if (steps == 0f) 0f else steps / EXPOSURE_STEPS_PER_EV
+        }
+
         /** Self-timer choices in seconds; the button cycles through them. */
         val SELF_TIMERS = listOf(0, 2, 5, 10)
 
@@ -499,6 +516,7 @@ object CameraSettingsStore {
             maxRes = p.getBoolean("maxRes", d.maxRes),
             rememberLast = p.getBoolean("rememberLast", d.rememberLast),
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
+            showExposureInfo = p.getBoolean("showExposureInfo", d.showExposureInfo),
             showGrid = p.getBoolean("showGrid", d.showGrid),
             language = AppLanguage.of(p.getString("language", null)),
             showLevel = p.getBoolean("showLevel", d.showLevel),
@@ -567,7 +585,11 @@ object CameraSettingsStore {
         val remembered = always.copy(
             lookId = p.getString("look", d.lookId) ?: d.lookId,
             strength = p.getFloat("strength", d.strength).coerceIn(0f, 100f),
-            brightness = p.getFloat("brightness", d.brightness).coerceIn(-100f, 100f),
+            // Brightness (-100..100 = -3..+3 EV) before it became Exposure (2026-11-28).
+            exposureEv = CameraSettings.snapExposure(
+                if (p.contains("exposureEv")) p.getFloat("exposureEv", d.exposureEv)
+                else p.getFloat("brightness", 0f) / 100f * LookApplier.BRIGHTNESS_EV,
+            ),
             warmth = p.getFloat("warmth", d.warmth).coerceIn(-100f, 100f),
             mono = p.getBoolean("mono", d.mono),
             monoLookId = p.getString("monoLook", d.monoLookId) ?: d.monoLookId,
@@ -612,7 +634,7 @@ object CameraSettingsStore {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("look", s.lookId)
             .putFloat("strength", s.strength)
-            .putFloat("brightness", s.brightness)
+            .putFloat("exposureEv", s.exposureEv)
             .putFloat("warmth", s.warmth)
             .putBoolean("mono", s.mono)
             .putString("monoLook", s.monoLookId)
@@ -628,6 +650,7 @@ object CameraSettingsStore {
             .putBoolean("maxRes", s.maxRes)
             .putBoolean("rememberLast", s.rememberLast)
             .putBoolean("showHistogram", s.showHistogram)
+            .putBoolean("showExposureInfo", s.showExposureInfo)
             .putBoolean("showGrid", s.showGrid)
             .putString("language", s.language.name)
             .putBoolean("showLevel", s.showLevel)

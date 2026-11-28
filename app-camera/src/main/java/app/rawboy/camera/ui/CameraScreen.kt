@@ -249,11 +249,20 @@ fun CameraScreen(
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
-    // Compact exposure readout in Street mode (rounded shutter + ISO to avoid high-frequency recomposition).
-    val streetExposureText by remember(vm, street) {
+    // Compact exposure readout, always in Street mode, else when Settings › Shutter speed and ISO is on (rounded
+    // shutter + ISO to avoid high-frequency recomposition). Outside Street mode it is what the photo will get: the
+    // metered exposure moved by Exposure's program.
+    val readout = street || shown.showExposureInfo
+    val exposureEv = shown.exposureEv
+    val streetExposureText by remember(vm, readout, street, exposureEv, videoMode) {
         vm.controller.frames.map { f ->
-            if (!street || f == null || f.exposureNs <= 0L || f.iso <= 0f) ""
-            else "${StreetExposure.formatShutter(f.exposureNs)} · ISO ${((f.iso / 10f).roundToInt() * 10).coerceAtLeast(10)}"
+            if (!readout || f == null || f.exposureNs <= 0L || f.iso <= 0f) ""
+            else {
+                val e = if (street || videoMode) null else vm.controller.stillExposure(exposureEv, f)
+                val t = e?.exposureNs ?: f.exposureNs
+                val iso = e?.iso?.toFloat() ?: f.iso
+                "${StreetExposure.formatShutter(t)} · ISO ${((iso / 10f).roundToInt() * 10).coerceAtLeast(10)}"
+            }
         }.distinctUntilChanged()
     }.collectAsStateWithLifecycle("")
     val snackbar = remember { SnackbarHostState() }
@@ -275,8 +284,8 @@ fun CameraScreen(
     LaunchedEffect(easy, street, recordingMs != null) {
         if (easy || street || recordingMs != null) stockTrayOpen = false
     }
-    // Landscape: what the tall slider changes (S, B, W/F); Brightness first.
-    var adjust by rememberSaveable { mutableStateOf(Adjust.BRIGHTNESS) }
+    // Landscape: what the tall slider changes (E, W/F); Exposure first.
+    var adjust by rememberSaveable { mutableStateOf(Adjust.EXPOSURE) }
     // Turned sideways the UI turns with the window, the viewfinder picture stays put on the glass.
     val displayRotation = rememberDisplayRotation()
     val turns = viewfinderTurns(displayRotation)
@@ -645,8 +654,8 @@ fun CameraScreen(
                                 .padding(bottom = 16.dp),
                         )
                     }
-                    // Subtle live exposure readout in Street mode so the shooter sees shutter speed at a glance.
-                    if (street && streetExposureText.isNotEmpty()) {
+                    // Subtle live exposure readout so the shooter sees shutter speed at a glance.
+                    if (streetExposureText.isNotEmpty()) {
                         Text(
                             streetExposureText,
                             style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
@@ -911,7 +920,12 @@ fun CameraScreen(
                     // A menu instead of a strip of chips, and one thin row per slider: the viewfinder keeps the screen.
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
                         lookRow(88.dp)
-                        LookSlider(tr("Brightness"), settings.brightness, -100f..100f, 0f, vm::setBrightness)
+                        CompactSlider(
+                            tr("Exposure"), settings.exposureEv * EXPOSURE_THIRDS, EXPOSURE_SLIDER_RANGE, 0f, rowHeight = 36.dp,
+                            labelWidth = LOOK_LABEL_WIDTH, valueWidth = LOOK_LABEL_WIDTH,
+                            format = { formatExposure(it / EXPOSURE_THIRDS) + " EV" },
+                            onChange = { vm.setExposure(it / EXPOSURE_THIRDS) },
+                        )
                         if (settings.monoMode) {
                             FilterRow(settings.filter, vm::setFilter)
                         } else {
@@ -2177,6 +2191,12 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             SettingSwitch("Grid", null, settings.showGrid, onChange = vm::setShowGrid)
             SettingSwitch("Level", null, settings.showLevel, onChange = vm::setShowLevel)
             SettingSwitch("Histogram", null, settings.showHistogram, onChange = vm::setShowHistogram)
+            SettingSwitch(
+                title = "Shutter speed and ISO",
+                subtitle = "What the photo will be shot at, in a corner of the viewfinder (always shown in Street mode)",
+                checked = settings.showExposureInfo,
+                onChange = vm::setShowExposureInfo,
+            )
 
             SettingsSection("Opening the camera")
             DefaultCameraChoice(
@@ -3013,8 +3033,27 @@ private val EASY_SHUTTER_SIZE = 96.dp
 /** Easy mode's landscape controls column: only the lenses. */
 private val EASY_LANDSCAPE_CONTROLS_WIDTH = 72.dp
 
-/** What the landscape slider changes: Brightness or Warmth (Filter in B&W mode). */
-private enum class Adjust { BRIGHTNESS, WARMTH }
+/** What the landscape slider changes: Exposure or Warmth (Filter in B&W mode). */
+private enum class Adjust { EXPOSURE, WARMTH }
+
+/** Exposure's slider runs in thirds of a stop, so its steps are whole numbers (-9..9). */
+private val EXPOSURE_THIRDS = CameraSettings.EXPOSURE_STEPS_PER_EV.toFloat()
+private val EXPOSURE_SLIDER_RANGE =
+    -CameraSettings.EXPOSURE_RANGE_EV * EXPOSURE_THIRDS..CameraSettings.EXPOSURE_RANGE_EV * EXPOSURE_THIRDS
+
+/** [ev] as cameras show it: "0", "+⅓", "−1⅔", "+3". */
+internal fun formatExposure(ev: Float): String {
+    val thirds = kotlin.math.round(ev * CameraSettings.EXPOSURE_STEPS_PER_EV).toInt()
+    if (thirds == 0) return "0"
+    val sign = if (thirds > 0) "+" else "−"
+    val whole = kotlin.math.abs(thirds) / 3
+    val fraction = when (kotlin.math.abs(thirds) % 3) {
+        1 -> "⅓"
+        2 -> "⅔"
+        else -> ""
+    }
+    return sign + (if (whole > 0) "$whole" else "") + fraction
+}
 
 /**
  * Landscape controls, all within the right thumb's reach: the status line and the look row on top; below, the lens
@@ -3063,8 +3102,8 @@ private fun LandscapeControls(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                AdjustChip("B", tr("Brightness"), formatSliderValue(settings.brightness, -100f..100f), adjust == Adjust.BRIGHTNESS,
-                    onSelect = { onAdjust(Adjust.BRIGHTNESS) }, onReset = { vm.setBrightness(0f) })
+                AdjustChip("E", tr("Exposure"), formatExposure(settings.exposureEv), adjust == Adjust.EXPOSURE,
+                    onSelect = { onAdjust(Adjust.EXPOSURE) }, onReset = { vm.setExposure(0f) })
                 if (mono) {
                     AdjustChip("F", tr("Filter"), tr(settings.filter.label), adjust == Adjust.WARMTH,
                         onSelect = { onAdjust(Adjust.WARMTH) }, onReset = { vm.setFilter(BwFilter.NONE) })
@@ -3079,13 +3118,15 @@ private fun LandscapeControls(
                 adjust == Adjust.WARMTH && mono -> FilterColumn(settings.filter, vm::setFilter)
                 else -> {
                     val (value, range, default, set) = when (adjust) {
-                        Adjust.BRIGHTNESS -> SliderSpec(settings.brightness, -100f..100f, 0f, vm::setBrightness)
+                        Adjust.EXPOSURE -> SliderSpec(settings.exposureEv * EXPOSURE_THIRDS, EXPOSURE_SLIDER_RANGE, 0f) {
+                            vm.setExposure(it / EXPOSURE_THIRDS)
+                        }
                         Adjust.WARMTH -> SliderSpec(settings.warmth, -100f..100f, 0f, vm::setWarmth)
                     }
                     VerticalSlider(
                         value, range, default, set,
                         label = when (adjust) {
-                            Adjust.BRIGHTNESS -> tr("Brightness")
+                            Adjust.EXPOSURE -> tr("Exposure")
                             Adjust.WARMTH -> tr("Warmth")
                         },
                         modifier = Modifier
