@@ -1404,6 +1404,12 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         streetMode: Boolean = false,
         /** Street mode minimum shutter speed floor ([StreetShutter.AUTO] leaves AE in charge). */
         streetShutter: StreetShutter = StreetShutter.AUTO,
+        /**
+         * Camera's Exposure (EV): a fresh single still or burst without flash is exposed by hand at the metered exposure
+         * x 2^[exposureEv] ([ExposureProgram]); [Still.compensationEv] says how much of it reached the raw. Frames from
+         * the ring buffer, flash stills and long exposures stay metered at 0 (the develop adds the EV).
+         */
+        exposureEv: Float = 0f,
         /** A single still's exposure is over (its capture result has arrived): screen flash may go dark. */
         onExposed: () -> Unit = {},
         onSubmitted: () -> Unit = {},
@@ -1435,7 +1441,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                     if (preferRing && rawRingWanted) {
                         zslBurstDng(inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)?.let { return@withLock it }
                     }
-                    return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)
+                    val program = programFor(inf, _frames.value, exposureEv)
+                    return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, program, onSubmitted)
                 }
                 // Ambient exposure before any light comes on: the flash still never needs more.
                 val ambient = _frames.value
@@ -1472,7 +1479,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                             )
                         } else null
                     } else null
-                    val manualExposure = flashExp?.first ?: streetManual
+                    val program = if (mode == FlashMode.OFF && !streetMode) programFor(inf, ambient, exposureEv) else null
+                    val manualExposure = flashExp?.first ?: streetManual ?: program?.exposure?.let { it.exposureNs to it.iso }
                     if (cameraAe) flashMetering(s, inf)
                     val why = when {
                         burstFrames <= 1 -> ""
@@ -1488,6 +1496,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                         compensationEv = when {
                             // The flash AE has the range to put all of it (the user's and the flash's) into the raw.
                             cameraAe -> compensationEv()
+                            program != null && streetManual == null -> program.capturedEv(captured.result)
                             manualExposure == null -> appliedCompensationEv(ambient)
                             else -> 0f
                         },
@@ -1721,12 +1730,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         if (inf.hiRes) setMaxResolution(inf)
         if (flash == FlashMode.OFF) {
             if (manual != null) {
-                // Street mode minimum shutter floor: lock manual exposure/ISO to freeze motion.
+                // Street mode's minimum shutter floor or Exposure's program: manual exposure/ISO, a fresh frame.
                 set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
-                set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
-                setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, manual.first)
-                setForLens(CaptureRequest.SENSOR_SENSITIVITY, manual.second)
-                setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
+                setManual(manual.first, manual.second)
             } else if (streetMode) {
                 // Street mode AE: keep the 30 fps preview floor (never drop to 1/15 s) and enable HAL ZSL.
                 set(CaptureRequest.CONTROL_ENABLE_ZSL, true)
@@ -1971,6 +1977,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         out: OutputStream,
         /** [appliedCompensationEv] at the shutter, or null to judge on the frame after the burst. */
         shutterEv: Float?,
+        /** Exposure's manual exposure for every frame, or null for AE. */
+        program: Program?,
         onSubmitted: () -> Unit,
     ): Still {
         val reader = rawReader ?: throw IOException("Camera not ready")
@@ -1986,6 +1994,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
             // Fresh frames from the shutter on, not zero-shutter-lag ones from the ring buffer.
             set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
+            program?.let { setManual(it.exposure.exposureNs, it.exposure.iso) }
             if (inf.hasLensShadingMap) {
                 setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
             }
@@ -2087,7 +2096,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             writeDngBuffer(inf.characteristics, reference, width, height, merged, exifOrientation, location, description, out)
             val (depth, dualPixel) = depthFor(reference, exifOrientation)
             return Still(
-                reference, null, effectiveFrames = effective, compensationEv = shutterEv ?: appliedCompensationEv(_frames.value),
+                reference, null, effectiveFrames = effective,
+                compensationEv = program?.capturedEv(reference) ?: shutterEv ?: appliedCompensationEv(_frames.value),
                 description = description, depth = depth, dualPixel = dualPixel,
             )
         } finally {
@@ -2339,7 +2349,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     /**
      * The (exposure ns, ISO) of one long-exposure frame, or null to leave it to AE (no preview reading yet). The
      * exposure is the preview's whole gain (time x ISO x the post-raw boost, which a manual raw doesn't get) times
-     * Brightness's compensation and a lift of up to [LONG_EXPOSURE_MAX_LIFT_EV] that brings a dark scene to
+     * any AE compensation and a lift of up to [LONG_EXPOSURE_MAX_LIFT_EV] that brings a dark scene to
      * [AutoTone.PHONE_KEY] (the key Camera's auto develop aims for), spent as time first (up to [LONG_EXPOSURE_FRAME_NS], the sensor's limit) then as ISO.
      */
     private fun longExposureManual(inf: Info, spec: LongExposure): Pair<Long, Int>? {
@@ -2365,8 +2375,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         if (gain <= 0f) return null
         val isoRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: return null
         val timeRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE) ?: return null
-        // The preview's AE already ran with the Brightness compensation, so its gain includes it: don't add it again.
-        // (Still.compensationEv keeps reporting it so the develop takes it back out.) spec.key is the scene's key in
+        // The preview's AE meters at 0 (Exposure stays in the develop for long exposures); any AE compensation it
+        // ran with is in its gain already. (Still.compensationEv keeps reporting it so the develop takes it back out.) spec.key is the scene's key in
         // the raw of the preview frame (viewfinder key x the calibrated preview scale; frames shot at the preview's time x ISO x boost give just this key); it
         // is null when the lens's preview isn't calibrated yet, which leaves the preview's exposure as it is.
         val lift = spec.key?.takeIf { it > 0f }?.let { key ->
@@ -2538,6 +2548,63 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
      */
     fun previewLinearToe(inf: Info): Float =
         if (!inf.hasPresetCurve && inf.hasContrastCurve && platform.preview.curveAtEvenPoints) PreviewCurve.evenToe else 0f
+
+    /**
+     * A still exposed by Exposure's program ([ExposureProgram]): its manual exposure, and the gain (s x ISO) AE would
+     * have given the raw at 0 EV, which [capturedEv] measures the result against.
+     */
+    class Program(val exposure: ExposureProgram.Exposure, private val meteredGain: Double) {
+        /** EV the raw of [result] got over the metered exposure (the develop takes it out and adds the Exposure). */
+        fun capturedEv(result: CaptureResult): Float = ExposureProgram.capturedEv(
+            result.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: exposure.exposureNs,
+            result.get(CaptureResult.SENSOR_SENSITIVITY) ?: exposure.iso,
+            meteredGain,
+        )
+    }
+
+    /**
+     * Exposure's manual exposure for a still shot now at [ev] over [ambient] (the newest preview frame), or null at 0 EV
+     * or before anything was metered. The metered exposure is what AE would give the still's raw: on phones whose boost
+     * stays digital the preview's time x ISO with the boost moved into time as the still request does ([stillGain]); where
+     * the boost reaches the raw ([CompensationModel.AE_GAIN_IN_RAW]) the boost counts as ISO. Any AE compensation of
+     * the frame (a flat video's raise) is taken out, so the program starts from 0.
+     */
+    private fun programFor(inf: Info, ambient: FrameState?, ev: Float, log: Boolean = true): Program? {
+        if (ev == 0f || ambient == null || ambient.exposureNs <= 0L || ambient.iso <= 0f) return null
+        val isoR = inf.isoRange ?: return null
+        val expR = inf.exposureRangeNs ?: return null
+        val atZero = 2.0.pow(-appliedCompensationEv(ambient, ofFrame = true).toDouble())
+        val (t0, iso0) = when (platform.still.compensation) {
+            CompensationModel.BOOST_STAYS_DIGITAL -> (ambient.exposureNs * stillGain(ambient) * atZero).toLong() to ambient.iso
+            CompensationModel.AE_GAIN_IN_RAW -> (ambient.exposureNs * atZero).toLong() to ambient.iso * ambient.postRawBoost
+        }
+        val e = ExposureProgram.compute(ev, t0, iso0, isoR.lower, isoR.upper, expR.lower, expR.upper, platform.still.maxStillExposureNs)
+        if (log) Log.d(TAG, "exposure program: $ev EV over ${ambient.exposureNs / 1000} µs ISO ${ambient.iso.toInt()} boost ${ambient.postRawBoost} " +
+            "(metered ${t0 / 1000} µs ISO ${iso0.toInt()}) -> ${e.exposureNs / 1000} µs ISO ${e.iso}")
+        return Program(e, t0 / 1e9 * iso0)
+    }
+
+    /**
+     * The exposure a still at [ev] would get now from [frame] (the newest preview frame by default): Exposure's program,
+     * or the metered one at 0 EV (the still's time when AE moves the boost into time). For the viewfinder's readout.
+     */
+    fun stillExposure(ev: Float, frame: FrameState? = _frames.value): ExposureProgram.Exposure? {
+        val inf = info ?: return null
+        val f = frame?.takeIf { it.exposureNs > 0L && it.iso > 0f } ?: return null
+        programFor(inf, f, ev, log = false)?.let { return it.exposure }
+        val boostInTime = if (platform.still.compensation == CompensationModel.BOOST_STAYS_DIGITAL) stillGain(f) else 1f
+        return ExposureProgram.Exposure((f.exposureNs * boostInTime).toLong(), f.iso.toInt())
+    }
+
+    /** AE off, [exposureNs] x [iso] by hand, nothing digital; the frame as long as the exposure needs. */
+    private fun CaptureRequest.Builder.setManual(exposureNs: Long, iso: Int) {
+        set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
+        setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, exposureNs)
+        setForLens(CaptureRequest.SENSOR_SENSITIVITY, iso)
+        // The HAL raises it to the sensor's minimum frame duration; longer exposures need a longer frame.
+        setForLens(CaptureRequest.SENSOR_FRAME_DURATION, exposureNs)
+        setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
+    }
 
     /**
      * How much brighter the still's raw will be than the preview frame [frame] (in raw terms: exposure time x ISO).

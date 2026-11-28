@@ -197,6 +197,15 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Auto; `CAMERA_AE` flash shots keep the phone's exposure): the phone's AE is kept, but lifted to `PHONE_KEY` (0.06) when it put the metered key below it (the Pixel's AE
   protects highlights: a white pigeon or a window in the box took the frame 1-2 EV down), never darker, max +2 EV.
   Re-metering to `AutoTone.TARGET_KEY` put rooms 1-2 EV under the Pixel's camera; plain AE (#87) still went dark on highlights.
+  **Exposure** (Android, 2026-11-28; replaced Brightness): `CameraSettings.exposureEv` (−3..+3 in thirds, `snapExposure`;
+  pref `exposureEv`, migrated from `brightness`), developed as the look's Brightness (`Adjustments.brightness` = EV / 3 × 100).
+  AE meters at 0 (`exposureBias` is only the flat-video raise), so the viewfinder adds it in the develop at once. Stills and
+  bursts at ≠ 0 (no flash, not the ring buffer, not Street) are manual (`CameraController.programFor` → pure
+  `capture/ExposureProgram`: time to 1/30 s, ISO to max, time to `maxStillExposureNs`; −EV ISO then time; flicker-safe
+  rounding; metered gain = preview t × ISO × `stillGain`, or × boost under `AE_GAIN_IN_RAW`), `Still.compensationEv` =
+  what reached the raw (`Program.capturedEv` from the result), so AutoTone's captureEv takes it out and the develop adds
+  the Exposure. Those shots skip viewfinder calibration. Readout: `CameraSettings.showExposureInfo` (off by default) /
+  Street → `CameraController.stillExposure`. Before that (history, iOS still does this):
   Brightness (2026-10-31) also goes into the capture as AE compensation (`CameraController.setExposureBias`: Camera2
   `CONTROL_AE_EXPOSURE_COMPENSATION` in `setCommon`, rounded to the step and range; iOS `setExposureTargetBias`), and
   `AutoTone.exposure(captureEv)` meters as if uncompensated, then subtracts it, so the picture equals the old

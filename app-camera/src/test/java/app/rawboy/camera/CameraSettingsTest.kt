@@ -18,7 +18,7 @@ class CameraSettingsTest {
     @Test
     fun easyModeForcesThePlainShotAndKeepsTheStoredValues() {
         val pro = CameraSettings(
-            brightness = 40f, warmth = -20f, keepDng = true, burstMode = BurstMode.ON, selfTimer = 5, longExposure = 10,
+            exposureEv = 1f, warmth = -20f, keepDng = true, burstMode = BurstMode.ON, selfTimer = 5, longExposure = 10,
             experimental = true, randomLightLeak = true, photoFrame = PhotoFrame.DATE_STAMP, trackFocus = true,
             flatVideo = true, videoMotionData = true, zslBurst = true, saveDepth = true, depthPortrait = true,
             showHistogram = true, showGrid = true, showLevel = true,
@@ -28,9 +28,8 @@ class CameraSettingsTest {
         assertEquals(pro, pro.effective)
         val easy = pro.copy(easy = true)
         val e = easy.effective
-        assertEquals(0f, e.brightness)
+        assertEquals(0f, e.exposureEv)
         assertEquals(0f, e.warmth)
-        assertEquals(0f, e.exposureCompensationEv)
         assertEquals(BurstMode.AUTO, e.burstMode)
         assertEquals(0, e.activeSelfTimer)
         assertEquals(null, e.longExposureSpec(null, PreviewLevel.BOOSTED, 1f))
@@ -51,7 +50,7 @@ class CameraSettingsTest {
         assertEquals(90, e.jpegQuality)
         assertEquals("T", e.lens)
         // The stored settings keep the user's own values for when Easy mode is off again.
-        assertEquals(40f, easy.brightness)
+        assertEquals(1f, easy.exposureEv)
         assertEquals(BurstMode.ON, easy.burstMode)
         assertEquals(pro, easy.copy(easy = false).effective)
     }
@@ -59,7 +58,7 @@ class CameraSettingsTest {
     @Test
     fun streetModeForcesFastSingleFrameAndKeepsStoredValues() {
         val pro = CameraSettings(
-            brightness = 30f, warmth = -15f, keepDng = true, burstMode = BurstMode.ON,
+            exposureEv = 2f / 3f, warmth = -15f, keepDng = true, burstMode = BurstMode.ON,
             flash = app.rawboy.camera.capture.FlashMode.FOCUS_FLASH, maxRes = true,
             selfTimer = 5, longExposure = 10, experimental = true, randomLightLeak = true,
             hdrGainMap = true, scanQr = true, trackFocus = true, flatVideo = true,
@@ -71,7 +70,7 @@ class CameraSettingsTest {
         assertTrue(pro.streetZsl)
         // Ephemeral Street session overrides without mutating settings.street.
         val s = pro.effectiveFor(streetActive = true)
-        assertEquals(0f, s.brightness)
+        assertEquals(0f, s.exposureEv)
         assertEquals(0f, s.warmth)
         assertEquals(BurstMode.OFF, s.burstMode)
         assertEquals(app.rawboy.camera.capture.FlashMode.OFF, s.flash)
@@ -142,7 +141,7 @@ class CameraSettingsTest {
         val modified = CameraSettings(
             jpegQuality = 80,
             strength = 50f,
-            brightness = 20f,
+            exposureEv = -1f / 3f,
             warmth = -15f,
             mono = true,
             film = false,
@@ -424,5 +423,24 @@ class CameraSettingsTest {
             defaults.copy(powerLaunchCamera = PowerLaunchCamera.Lens(true, "W")).resetToDefaults().powerLaunchCamera,
         )
     }
-}
 
+    @Test
+    fun exposureSnapsToThirdsWithinThreeStops() {
+        assertEquals(0f, CameraSettings.snapExposure(0.1f))
+        assertEquals(1f / 3f, CameraSettings.snapExposure(0.3f), 1e-6f)
+        assertEquals(-2f / 3f, CameraSettings.snapExposure(-0.7f), 1e-6f)
+        assertEquals(3f, CameraSettings.snapExposure(5f))
+        assertEquals(-3f, CameraSettings.snapExposure(-4f))
+        assertEquals(0f, CameraSettings.snapExposure(Float.NaN))
+    }
+
+    @Test
+    fun exposureDevelopsAsTheLookBrightness() {
+        // +1 EV of Exposure is the look's Brightness of +1 EV (100 = LookApplier.BRIGHTNESS_EV).
+        val base = app.rawboy.develop.DevelopParams()
+        val noise = app.rawboy.camera.platform.generic.neutralPlatform.noise
+        val zero = CameraSettings(film = false).develop(base, false, noise)
+        val up = CameraSettings(film = false, exposureEv = 1f).develop(base, false, noise)
+        assertEquals(zero.exposure + 1f, up.exposure, 1e-4f)
+    }
+}

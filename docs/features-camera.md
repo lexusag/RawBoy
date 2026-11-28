@@ -32,7 +32,9 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | AF LOCK, drag the ring with a 3× loupe | 1.5.3 | ✓ | ✓ | |
 | **AE/WB LOCK** (exposure + white balance lock in photo and video modes, independent of focus lock) | 1.10.7 (video AE); unreleased (WB + photo mode) | ✓ | ✓ | Locks camera AE + AWB (`CONTROL_AE_LOCK` + `CONTROL_AWB_LOCK` on Android; `exposureMode` + `whiteBalanceMode` `.locked` on iOS) and holds the live/shot develop exposure so recomposing does not re-meter it |
 | **Track the subject after a tap** (off by default) | 1.6.0 | ✓ | ✓ | `PatternTracker` shared; iOS untested on the phone when added |
-| Brightness slider that also sets exposure compensation | 1.6.2 | ✓ | ✓ | Brightness holds in low light: 1.7.3 |
+| Brightness slider that also sets exposure compensation | 1.6.2 | — | ✓ | Brightness holds in low light: 1.7.3; Android replaced it with Exposure (below) |
+| **Exposure** slider as in P mode: −3..+3 EV in thirds, AE meters at 0, the viewfinder adds it in the develop, stills (and bursts) exposed by hand along a program line (time to 1/30 s, ISO, time to the still limit; flicker-safe), the rest digital | unreleased | ✓ | — | `ExposureProgram`; ring-buffer, flash, long exposure and video frames: develop only |
+| Shutter speed and ISO readout over the viewfinder (Settings, off by default; always in Street mode) | unreleased | ✓ | — | Shows the program's exposure for the next photo |
 | Warmth slider | ≤1.1.1 | ✓ | ✓ | Becomes the filter in B&W mode |
 | Look strength | ≤1.1.1 | ✓ (in Settings since 1.14.8) | ✓ | |
 | Flash: Focus-flash (torch focus, then the flash) | ≤1.1.1; only mode 1.3.0 | ✓ manual flash exposure | ◐ the camera's own flash AE | Flash exposure at zoom 1.10.0 |
@@ -47,7 +49,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | QR codes (Open, Join Wi-Fi, Email, Call, Message, Map, Copy) | 1.5.6 | ✓ ZXing | ✓ AVFoundation | |
 | Geotag (JPEG and DNG GPS tags) | 1.4.0 | ✓ | ✓ 1.4.7 | Android writes a full GPS IFD into the DNG (`DngGps`) |
 | Landscape layout (controls on the right edge) | 1.7.0 | ✓ | ✓ | |
-| **Easy mode** (Settings › Easy mode, off by default; prototype): viewfinder, lenses, RAW, Frames, flash, Photo / Video, Colour / B&W (default film stock, or Film + B&W on the default mono stock) and a 96 dp shutter; a short Settings sheet | unreleased | ✓ | — | Forces a plain shot without changing the stored settings (`CameraSettings.effective`): no leak, Brightness/Warmth, timer, long exposure, tracking, flat video, motion data, histogram, grid, level or zoom buttons; merging on Auto; no hold-to-compare or loupe |
+| **Easy mode** (Settings › Easy mode, off by default; prototype): viewfinder, lenses, RAW, Frames, flash, Photo / Video, Colour / B&W (default film stock, or Film + B&W on the default mono stock) and a 96 dp shutter; a short Settings sheet | unreleased | ✓ | — | Forces a plain shot without changing the stored settings (`CameraSettings.effective`): no leak, Exposure/Warmth, timer, long exposure, tracking, flat video, motion data, histogram, grid, level or zoom buttons; merging on Auto; no hold-to-compare or loupe |
 | **Street mode & fast start** (double-press power button, off by default, pinned **Street** shortcut, Quick Settings tile, Settings › Street mode): instant cached camera open + binary GL shader cache + frame-0 live preview + queued early shutter + Snap Focus (`AF`/`1.5m`/`2.5m`/`5m`/`∞`) + min shutter floor + 3-frame single-shot ZSL + Easy-mode Colour / B&W | unreleased | ✓ | — | Fast-start pipeline (`FastLensCache`, early `preopen`, `GlProgramCache`, `FastPreviewProgram`, off-lock DNG write, Baseline Profile) speeds up all modes; Street mode forces single-frame/ZSL capture without changing stored full-camera settings; iOS parity planned next |
 | Lock-screen camera, double-press power button (opens `W` by default, or **Last opened** / any selected lens via Settings › Power double-press camera) | 1.5.5; 1.5.6; camera choice unreleased | ✓ | — | iOS: not done (needs LockedCameraCapture) |
 | Opens fast and saves while locking right after a shot | 1.5.7 | ✓ foreground service + wake lock | n/a | |
@@ -94,7 +96,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 In order of how much it changes the photo: **burst merge** (iOS is single-frame ProRAW, which the changelog says gives
 "far less grain than a single Bayer frame in low light"), **video motion data and stabilized copies** (iOS records video, with the camera's own stabilization only, no flat video), the **viewfinder from RAW** prototype (AVFoundation offers no raw video stream),
 **HDR gain map** (Ultra HDR JPEG), **lock-screen and power-button launch**, **digital zoom up to 10×**, **selfie
-screen flash**, **self-timer and long exposure**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
+screen flash**, **self-timer and long exposure**, **Exposure as in P mode** (iOS keeps Brightness as AE compensation) and the **shutter speed and ISO readout**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
 system 48 MP option, unchecked), **phone profiles, Share device report and Collect tuning data** (n/a on iOS: one hardware family),
 **Pixel workarounds** (YUV matrix, tone curve, extra black, manual flash exposure: iOS uses the camera's own flash AE).
 **Ukrainian translation and the language setting** (Android only: iOS needs its own String Catalog).

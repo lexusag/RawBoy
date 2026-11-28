@@ -26,7 +26,6 @@ import app.rawboy.auto.analysis.SceneLight
 import app.rawboy.auto.analysis.SceneRecognition
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.Look
-import app.rawboy.auto.looks.LookApplier
 import app.rawboy.auto.looks.Looks
 import app.rawboy.camera.depth.DualPixelCalibrations
 import app.rawboy.camera.capture.CameraController
@@ -1741,13 +1740,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * AE compensation for [s]'s Brightness: all of it goes into the capture (preview and stills), and the develop takes
-     * the applied part back out (AutoTone's captureEv), so Brightness looks the same and raises the shot's exposure.
+     * AE compensation the preview runs with. Exposure isn't in it: AE meters every frame at 0, as a camera in P mode
+     * does, the viewfinder (and video) adds Exposure in the develop at once, and stills at Exposure != 0 are exposed by
+     * hand from the metered exposure ([CameraController.captureDng]'s exposureEv, [app.rawboy.camera.capture.ExposureProgram]).
+     * Only a flat video's raise is AE compensation (the file keeps the lift, see VideoRecorder.FLAT_RAISE_EV).
      */
     private fun exposureBias(s: CameraSettings): Float =
-        s.brightness / 100f * LookApplier.BRIGHTNESS_EV +
-            // Flat video exposes this much higher for the shadows (the file keeps the lift, see VideoRecorder.FLAT_RAISE_EV).
-            if (_videoMode.value && s.flatVideo) VideoRecorder.FLAT_RAISE_EV else 0f
+        if (_videoMode.value && s.flatVideo) VideoRecorder.FLAT_RAISE_EV else 0f
 
     /** Only the newest control values matter: a newer publish replaces one still running. */
     private fun republish() {
@@ -1793,7 +1792,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun setFilter(f: BwFilter) = change { it.copy(filter = f) }
     fun setStrength(v: Float) = change { it.copy(strength = v) }
-    fun setBrightness(v: Float) = change { it.copy(brightness = v) }
+    fun setExposure(ev: Float) = change { it.copy(exposureEv = CameraSettings.snapExposure(ev)) }
     fun setWarmth(v: Float) = change { it.copy(warmth = v) }
     fun setJpegQuality(q: Int) = change { it.copy(jpegQuality = q.coerceIn(CameraSettings.MIN_QUALITY, 100)) }
     fun setKeepDng(keep: Boolean) = change { it.copy(keepDng = keep) }
@@ -1819,6 +1818,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         change { it.copy(showHistogram = on) }
     }
     fun setShowZoomControl(on: Boolean) = change { it.copy(showZoomControl = on) }
+    fun setShowExposureInfo(on: Boolean) = change { it.copy(showExposureInfo = on) }
     fun setLanguage(language: AppLanguage) = change { it.copy(language = language) }
     fun setShowGrid(on: Boolean) = change { it.copy(showGrid = on) }
     fun setShowLevel(on: Boolean) {
@@ -2212,15 +2212,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // A long exposure's raw is lifted away from what the viewfinder predicted for a still: it must not calibrate the preview.
         // The raw viewfinder needs no preview calibration (its learned scale would mean nothing for the ISP's preview).
         // A ZSL ring shot comes from TEMPLATE_PREVIEW frames, not TEMPLATE_STILL_CAPTURE, so don't calibrate previewScale from it.
-        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null && !preferRing && _frame.value?.raw != true) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
+        // A shot at Exposure != 0 is exposed by hand away from the metered exposure the viewfinder shows: no calibration.
+        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null && !preferRing && _frame.value?.raw != true &&
+            settings.exposureEv == 0f) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
             Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +
                 "tonemap ${f.tonemapMode}, viewfinder key $viewfinderKey, preview scale ${settings.previewScale(hiRes)}, " +
                 "colour ${f.previewColor?.joinToString(" ") { "%.3f".format(it) } ?: "sRGB"}, " +
                 "wb ${live?.defaults?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }} -> " +
-                "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}, live exposure ${live?.auto?.exposure} + brightness " +
-                "${settings.exposureCompensationEv} EV")
+                "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}, live exposure ${live?.auto?.exposure} + Exposure " +
+                "${settings.exposureEv} EV")
         }
         val shotId = ShotSaver.beginCapture(app)
         DebugProbe.describe(controller.lastPreviewResult, always = TuningData.collecting).takeIf { it.isNotEmpty() }?.let { probe ->
@@ -2340,6 +2342,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                             controller.captureDng(
                                 orientation, it, flash, settings.flashGuide(hiRes), burstFrames, preferRing, fix,
                                 longExposure, mergeNote, streetMode = streetMode, streetShutter = streetShutter,
+                                exposureEv = settings.exposureEv,
                                 onExposed = { exposed.complete(Unit); _longExposing.value = false },
                             ) { onShutter(screenFlash, exposed, shutterStartMs) }
                         }
@@ -2364,6 +2367,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                             controller.captureDng(
                                 orientation, it, flash, settings.flashGuide(hiRes), burstFrames, preferRing, fix,
                                 longExposure, mergeNote, streetMode = streetMode, streetShutter = streetShutter,
+                                exposureEv = settings.exposureEv,
                                 onExposed = { exposed.complete(Unit); _longExposing.value = false },
                             ) { onShutter(screenFlash, exposed, shutterStartMs) }
                         }

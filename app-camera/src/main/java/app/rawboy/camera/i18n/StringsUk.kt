@@ -41,8 +41,8 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "AE/WB ФІКС.",
     "Without look" to
         "Без обробки",
-    "Brightness" to
-        "Яскравість",
+    "Exposure" to
+        "Експозиція",
     "Warmth" to
         "Теплота",
     "QR code" to
@@ -263,6 +263,10 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Рівень",
     "Histogram" to
         "Гістограма",
+    "Shutter speed and ISO" to
+        "Витримка й ISO",
+    "What the photo will be shot at, in a corner of the viewfinder (always shown in Street mode)" to
+        "З якими параметрами буде знято фото, у куті видошукача (у вуличному режимі показується завжди)",
     "Opening the camera" to
         "Відкриття камери",
     "Unlocked camera" to
@@ -475,14 +479,14 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Меню стилів",
     "The film look the viewfinder shows and the photo gets." to
         "Плівковий стиль, який показує видошукач і який отримає фото.",
-    "Brightness, Warmth" to
-        "Яскравість, теплота",
-    "Brighter or darker, warmer or cooler. Double-tap a slider to reset it. How much of the look the photo gets (Strength) is in Settings." to
-        "Світліше чи темніше, тепліше чи холодніше. Двічі торкніться повзунка, щоб скинути. Скільки стилю отримає фото (Сила), налаштовується в Налаштуваннях.",
+    "Exposure, Warmth" to
+        "Експозиція, теплота",
+    "Exposure compensation, as on a camera in P mode: −3 to +3 EV in thirds of a stop. The camera still meters the scene, and the viewfinder shows the change at once; the photo is then shot brighter or darker (a longer exposure or a higher ISO for +, a lower ISO or a faster shutter for −), so a brighter photo has cleaner shadows and a darker one keeps more of the highlights. Warmth: warmer or cooler. Double-tap a slider to reset it. How much of the look the photo gets (Strength) is in Settings." to
+        "Експокорекція, як у камери в режимі P: від −3 до +3 EV третинами ступеня. Камера й далі вимірює сцену, а видошукач одразу показує зміну; фото знімається світлішим або темнішим (довша витримка чи вище ISO для +, нижче ISO чи коротша витримка для −), тож світліше фото має чистіші тіні, а темніше зберігає більше світлих ділянок. Теплота: тепліше чи холодніше. Двічі торкніться повзунка, щоб скинути. Скільки стилю отримає фото (Сила), налаштовується в Налаштуваннях.",
     "Phone held sideways" to
         "Телефон горизонтально",
-    "The controls move to the right, under your thumb: the shutter in the middle of the edge, a tall slider beside it, and B and W (F, the filter, in B&W) to pick what the slider changes, with the lenses in a column beside them. Double-tap a letter or the slider to reset it. RAW, Frames, Portrait, Burst, Flash, ? and Settings are at the left." to
-        "Елементи керування переходять праворуч, під великий палець: затвор посередині краю, поруч високий повзунок, а B і W (F, фільтр, у Ч/Б) обирають, що він змінює; кнопки об’єктивів стоять колонкою поряд. Двічі торкніться літери або повзунка, щоб скинути. RAW, Рамки, Портрет, Серія, Спалах, ? і Налаштування зліва.",
+    "The controls move to the right, under your thumb: the shutter in the middle of the edge, a tall slider beside it, and E and W (F, the filter, in B&W) to pick what the slider changes, with the lenses in a column beside them. Double-tap a letter or the slider to reset it. RAW, Frames, Portrait, Burst, Flash, ? and Settings are at the left." to
+        "Елементи керування переходять праворуч, під великий палець: затвор посередині краю, поруч високий повзунок, а E і W (F, фільтр, у Ч/Б) обирають, що він змінює; кнопки об’єктивів стоять колонкою поряд. Двічі торкніться літери або повзунка, щоб скинути. RAW, Рамки, Портрет, Серія, Спалах, ? і Налаштування зліва.",
     "The B&W button left of the Look menu switches to black and white: the menu lists the black and white films, and Filter (Yellow, Orange, Red, Green) takes Warmth's place. Like a coloured filter on the lens, it lightens its own colour and darkens the others: Red gives dark skies and smooth skin, Green darker skin and lighter leaves. The DNG stays in colour." to
         "Кнопка Ч/Б зліва від меню стилів вмикає чорно-біле: у меню чорно-білі плівки, а Фільтр (жовтий, помаранчевий, червоний, зелений) заступає Теплоту. Як кольоровий фільтр на об’єктиві, він освітлює свій колір і затемнює інші: червоний дає темне небо й гладку шкіру, зелений — темнішу шкіру й світліше листя. DNG залишається кольоровим.",
     "Top bar" to
