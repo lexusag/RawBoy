@@ -32,9 +32,9 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | AF LOCK, drag the ring with a 3× loupe | 1.5.3 | ✓ | ✓ | |
 | **AE/WB LOCK** (exposure + white balance lock in photo and video modes, independent of focus lock) | 1.10.7 (video AE); unreleased (WB + photo mode) | ✓ | ✓ | Locks camera AE + AWB (`CONTROL_AE_LOCK` + `CONTROL_AWB_LOCK` on Android; `exposureMode` + `whiteBalanceMode` `.locked` on iOS) and holds the live/shot develop exposure so recomposing does not re-meter it |
 | **Track the subject after a tap** (off by default) | 1.6.0 | ✓ | ✓ | `PatternTracker` shared; iOS untested on the phone when added |
-| Brightness slider that also sets exposure compensation | 1.6.2 | — | ✓ | Brightness holds in low light: 1.7.3; Android replaced it with Exposure (below) |
-| **Exposure** slider as in P mode: −3..+3 EV in thirds, AE meters at 0, the viewfinder adds it in the develop, stills (and bursts) exposed by hand along a program line (time to 1/30 s, ISO, time to the still limit; flicker-safe), the rest digital | unreleased | ✓ | — | `ExposureProgram`; ring-buffer, flash, long exposure and video frames: develop only |
-| Shutter speed and ISO readout over the viewfinder (Settings, off by default; always in Street mode) | unreleased | ✓ | — | Shows the program's exposure for the next photo |
+| Brightness slider that also sets exposure compensation | 1.6.2 | — | — | Brightness holds in low light: 1.7.3; replaced by Exposure (below) on both |
+| **Exposure** slider as in P mode: −3..+3 EV in thirds, AE meters at 0, the viewfinder adds it in the develop, stills (and bursts) exposed by hand along a program line (time to 1/30 s, ISO, time to the still limit; flicker-safe), the rest digital | unreleased | ✓ | ✓ | `ExposureProgram` (iOS: `setExposureModeCustom` per still, no bursts); ring-buffer, flash, long exposure and video frames: develop only |
+| Shutter speed and ISO readout over the viewfinder (Settings, off by default; always in Street mode) | unreleased | ✓ | ✓ | Shows the program's exposure for the next photo |
 | Warmth slider | ≤1.1.1 | ✓ | ✓ | Becomes the filter in B&W mode |
 | Look strength | ≤1.1.1 | ✓ (in Settings since 1.14.8) | ✓ | |
 | Flash: Focus-flash (torch focus, then the flash) | ≤1.1.1; only mode 1.3.0 | ✓ manual flash exposure | ◐ the camera's own flash AE | Flash exposure at zoom 1.10.0 |
@@ -96,7 +96,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 In order of how much it changes the photo: **burst merge** (iOS is single-frame ProRAW, which the changelog says gives
 "far less grain than a single Bayer frame in low light"), **video motion data and stabilized copies** (iOS records video, with the camera's own stabilization only, no flat video), the **viewfinder from RAW** prototype (AVFoundation offers no raw video stream),
 **HDR gain map** (Ultra HDR JPEG), **lock-screen and power-button launch**, **digital zoom up to 10×**, **selfie
-screen flash**, **self-timer and long exposure**, **Exposure as in P mode** (iOS keeps Brightness as AE compensation) and the **shutter speed and ISO readout**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
+screen flash**, **self-timer and long exposure**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
 system 48 MP option, unchecked), **phone profiles, Share device report and Collect tuning data** (n/a on iOS: one hardware family),
 **Pixel workarounds** (YUV matrix, tone curve, extra black, manual flash exposure: iOS uses the camera's own flash AE).
 **Ukrainian translation and the language setting** (Android only: iOS needs its own String Catalog).

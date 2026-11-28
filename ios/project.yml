@@ -224,6 +224,8 @@ targets:
           - FilmstripSelectionTests.swift  # Desktop's filmstrip pick, macOS only
       # Camera's orientation tracker and rotation math (pure Foundation).
       - path: Camera/capture/CameraOrientation.swift
+      # Camera's Exposure program line (pure Foundation).
+      - path: Camera/capture/ExposureProgram.swift
     dependencies:
       - package: RawBoyViewerPackages
         product: RawBoyBrowseKit
@@ -403,6 +405,8 @@ targets:
       - path: Desktop/FilmstripSelection.swift
       # Camera's orientation tracker and rotation math (pure Foundation).
       - path: Camera/capture/CameraOrientation.swift
+      # Camera's Exposure program line (pure Foundation).
+      - path: Camera/capture/ExposureProgram.swift
     dependencies:
       - package: RawBoyViewerPackages
         product: ViewerImaging

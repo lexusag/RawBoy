@@ -67,7 +67,12 @@ enum RawPreview: String, CaseIterable {
 struct CameraSettings: Equatable {
     var lookId = Edition.defaultLookId
     var strength: Float = LookApplier.defaultStrength
-    var brightness: Float = 0
+    /**
+     * Exposure (EV, -3...+3 in thirds), as on a camera in P mode: AE meters at 0, the viewfinder adds this in the
+     * develop, and a still at != 0 is exposed by hand along ExposureProgram (what reached the raw comes back as the
+     * shot's compensationEv). Developed as the look's Brightness (EV / 3 x 100).
+     */
+    var exposureEv: Float = 0
     var warmth: Float = 0
     /**
      * B&W mode (Edition.monoLooks): the photo is black and white, on monoLookId's stock seen through
@@ -78,7 +83,7 @@ struct CameraSettings: Equatable {
     var monoLookId = Edition.defaultMonoLookId
     /**
      * Film mode (the Film toggle, Edition.filmLooks): colour photos on filmLookId's film stock instead of
-     * lookId's LUT look. Each mode keeps its own pick; Strength, Brightness and Warmth are shared. B&W mode wins over
+     * lookId's LUT look. Each mode keeps its own pick; Strength, Exposure and Warmth are shared. B&W mode wins over
      * it, but leaves it on, so leaving B&W comes back to it.
      * On by default (owner's choice, 2026-10-31).
      */
@@ -105,6 +110,8 @@ struct CameraSettings: Equatable {
     var showHistogram = false
     /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
     var showGrid = false
+    /** Shows the next photo's shutter speed and ISO over the viewfinder (off by default). */
+    var showExposureInfo = false
     /** A level line over the viewfinder that turns yellow when the phone is straight. Off by default. */
     var showLevel = false
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Location access is asked for when turned on. */
@@ -194,7 +201,7 @@ struct CameraSettings: Equatable {
     }
 
     private func developLook(_ base: DevelopParams, hasFace: Bool) -> DevelopParams {
-        let adjust = Adjustments(brightness: brightness, warmth: monoMode ? 0 : warmth,
+        let adjust = Adjustments(brightness: exposureEv / LookApplier.brightnessEv * 100, warmth: monoMode ? 0 : warmth,
                                  contrast: filmMono ? Self.filmMonoContrast : 0)
         var p = LookApplier.apply(base, look: look, strength: strength, adjust: adjust, hasFace: hasFace)
         if monoMode {
@@ -225,8 +232,6 @@ struct CameraSettings: Equatable {
     static let lookContrast: Float = 6
     static let lookSaturation: Float = 8
 
-    /** Exposure compensation (EV) set by the Brightness slider (`brightness` in -100..+100 -> -3.0..+3.0 EV). */
-    var exposureCompensationEv: Float { brightness / 100 * LookApplier.brightnessEv }
 
     /** The long side to save at, or nil for full size. */
     var maxLongSide: Int? { smallExport ? Self.smallLongSide : nil }
@@ -282,6 +287,7 @@ enum CameraSettingsStore {
         s.rememberLast = d.bool(forKey: "camera.rememberLast")
         s.showHistogram = d.object(forKey: "camera.showHistogram") as? Bool ?? def.showHistogram
         s.showGrid = d.object(forKey: "camera.showGrid") as? Bool ?? def.showGrid
+        s.showExposureInfo = d.object(forKey: "camera.showExposureInfo") as? Bool ?? def.showExposureInfo
         s.showLevel = d.object(forKey: "camera.showLevel") as? Bool ?? def.showLevel
         s.geotag = d.object(forKey: "camera.geotag") as? Bool ?? def.geotag
         s.photoFrame = d.string(forKey: "camera.photoFrame").flatMap(PhotoFrame.init(rawValue:))
@@ -312,7 +318,12 @@ enum CameraSettingsStore {
         if !s.rememberLast { return s }
         s.lookId = d.string(forKey: "camera.look") ?? def.lookId
         s.strength = min(max(d.object(forKey: "camera.strength") as? Float ?? def.strength, 0), 100)
-        s.brightness = min(max(d.object(forKey: "camera.brightness") as? Float ?? 0, -100), 100)
+        // Exposure replaced Brightness (-100...100 = -3...+3 EV) on 2026-11-28.
+        if let ev = d.object(forKey: "camera.exposureEv") as? Float {
+            s.exposureEv = ExposureProgram.snap(ev)
+        } else if let brightness = d.object(forKey: "camera.brightness") as? Float {
+            s.exposureEv = ExposureProgram.snap(brightness / 100 * LookApplier.brightnessEv)
+        }
         s.warmth = min(max(d.object(forKey: "camera.warmth") as? Float ?? 0, -100), 100)
         s.mono = d.bool(forKey: "camera.mono")
         s.monoLookId = d.string(forKey: "camera.monoLook") ?? def.monoLookId
@@ -334,7 +345,7 @@ enum CameraSettingsStore {
     static func save(_ s: CameraSettings) {
         d.set(s.lookId, forKey: "camera.look")
         d.set(s.strength, forKey: "camera.strength")
-        d.set(s.brightness, forKey: "camera.brightness")
+        d.set(s.exposureEv, forKey: "camera.exposureEv")
         d.set(s.warmth, forKey: "camera.warmth")
         d.set(s.mono, forKey: "camera.mono")
         d.set(s.monoLookId, forKey: "camera.monoLook")
@@ -349,6 +360,7 @@ enum CameraSettingsStore {
         d.set(s.rememberLast, forKey: "camera.rememberLast")
         d.set(s.showHistogram, forKey: "camera.showHistogram")
         d.set(s.showGrid, forKey: "camera.showGrid")
+        d.set(s.showExposureInfo, forKey: "camera.showExposureInfo")
         d.set(s.showLevel, forKey: "camera.showLevel")
         d.set(s.geotag, forKey: "camera.geotag")
         d.set(s.photoFrame.rawValue, forKey: "camera.photoFrame")

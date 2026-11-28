@@ -15,8 +15,8 @@ struct CameraScreen: View {
     @State private var holding = false
     /** The focus point when the ring's drag began. */
     @State private var dragStart: CGPoint?
-    /** Landscape: what the tall slider changes; Brightness first. */
-    @State private var adjust: Adjust = .brightness
+    /** Landscape: what the tall slider changes; Exposure first. */
+    @State private var adjust: Adjust = .exposure
     @StateObject private var orientation = InterfaceOrientation()
 
     /** Width of the landscape controls column (look menu, S/B/W picker and the tall slider) beside the shutter column. */
@@ -77,8 +77,10 @@ struct CameraScreen: View {
                         // A menu instead of a strip of chips, and one row per slider: the viewfinder keeps the screen.
                         VStack(spacing: 0) {
                             lookPicker
-                            ValueSlider("Brightness", value: vm.settings.brightness, range: -100...100, defaultValue: 0,
-                                        onChange: vm.setBrightness)
+                            ValueSlider("Exposure", value: vm.settings.exposureEv * Self.exposureThirds,
+                                        range: -Self.exposureRangeThirds...Self.exposureRangeThirds, defaultValue: 0,
+                                        format: { Self.formatExposure($0 / Self.exposureThirds) + " EV" },
+                                        onChange: { vm.setExposure($0 / Self.exposureThirds) })
                             if vm.settings.monoMode {
                                 FilterRow(selected: vm.settings.filter, onSelect: vm.setFilter)
                             } else {
@@ -363,12 +365,22 @@ struct CameraScreen: View {
                 if vm.compare {
                     OverlayLabel("Without look").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                // Top right: the histogram (Settings), then the raw format when it isn't the chosen one.
+                // Top right: the histogram (Settings), the next photo's shutter speed and ISO (Settings), then the raw
+                // format when it isn't the chosen one.
                 VStack(alignment: .trailing, spacing: 6) {
                     if vm.settings.showHistogram {
                         HistogramView(histogram: vm.histogram)
                             .frame(width: 120, height: 48)
                             .allowsHitTesting(false)
+                    }
+                    if let e = vm.stillExposure {
+                        Text("\(Self.formatShutter(e.exposureNs))  ISO \(e.iso)")
+                            .font(.caption.monospacedDigit())
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.black.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
+                            .allowsHitTesting(false)
+                            .accessibilityLabel("Next photo: \(Self.formatShutter(e.exposureNs)) seconds, ISO \(e.iso)")
                     }
                     if vm.recording != vm.settings.rawFormat {
                         Text(vm.recording == .proRaw ? "ProRAW" : "RAW")
@@ -562,7 +574,7 @@ struct CameraScreen: View {
 
     /**
      * Landscape controls, all within the right thumb's reach: the status line and the look row on top; below, round
-     * B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked
+     * E / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked
      * the filters stand there instead of the slider. A double tap on a chip or the slider resets that setting.
      */
     private var landscapeControls: some View {
@@ -572,8 +584,8 @@ struct CameraScreen: View {
             lookPicker
             HStack(spacing: 8) {
                 VStack(spacing: 12) {
-                    AdjustChip(letter: "B", name: "Brightness", value: Self.signed(s.brightness), selected: adjust == .brightness,
-                               onSelect: { adjust = .brightness }, onReset: { vm.setBrightness(0) })
+                    AdjustChip(letter: "E", name: "Exposure", value: Self.formatExposure(s.exposureEv), selected: adjust == .exposure,
+                               onSelect: { adjust = .exposure }, onReset: { vm.setExposure(0) })
                     if s.monoMode {
                         AdjustChip(letter: "F", name: "Filter", value: s.filter.label, selected: adjust == .warmth,
                                    onSelect: { adjust = .warmth }, onReset: { vm.setFilter(.off) })
@@ -587,8 +599,10 @@ struct CameraScreen: View {
                     FilterColumn(selected: s.filter, onSelect: vm.setFilter)
                 } else {
                     switch adjust {
-                    case .brightness:
-                        VerticalSlider(label: "Brightness", value: s.brightness, range: -100...100, defaultValue: 0, onChange: vm.setBrightness)
+                    case .exposure:
+                        VerticalSlider(label: "Exposure", value: s.exposureEv * Self.exposureThirds,
+                                       range: -Self.exposureRangeThirds...Self.exposureRangeThirds, defaultValue: 0,
+                                       onChange: { vm.setExposure($0 / Self.exposureThirds) })
                     case .warmth:
                         VerticalSlider(label: "Warmth", value: s.warmth, range: -100...100, defaultValue: 0, onChange: vm.setWarmth)
                     }
@@ -602,6 +616,29 @@ struct CameraScreen: View {
     }
 
     /** Whole numbers, + on positive values (Android's formatSliderValue). */
+    /** The Exposure sliders run in thirds of a stop. */
+    private static let exposureThirds = ExposureProgram.stepsPerEv
+    private static let exposureRangeThirds = ExposureProgram.rangeEv * ExposureProgram.stepsPerEv
+
+    /** Exposure as cameras show it: 0, +⅓, −1⅔, +3. */
+    static func formatExposure(_ ev: Float) -> String {
+        let thirds = Int((ev * ExposureProgram.stepsPerEv).rounded())
+        if thirds == 0 { return "0" }
+        let whole = abs(thirds) / 3
+        let fraction = ["", "⅓", "⅔"][abs(thirds) % 3]
+        return (thirds > 0 ? "+" : "−") + (whole > 0 ? "\(whole)" : "") + fraction
+    }
+
+    /** A shutter speed as cameras show it: 1/125, 1/4, 0.5", 2". */
+    static func formatShutter(_ ns: Int64) -> String {
+        let seconds = Double(ns) / 1e9
+        if seconds >= 0.4 {
+            let rounded = (seconds * 10).rounded() / 10
+            return rounded == rounded.rounded() ? "\(Int(rounded))\"" : "\(rounded)\""
+        }
+        return "1/\(Int((1 / seconds).rounded()))"
+    }
+
     private static func signed(_ v: Float) -> String {
         let n = Int(v.rounded())
         return n > 0 ? "+\(n)" : "\(n)"
@@ -1095,6 +1132,8 @@ private struct SettingsSheet: View {
                     row("Grid", nil, Binding(get: { vm.settings.showGrid }, set: vm.setShowGrid))
                     row("Level", nil, Binding(get: { vm.settings.showLevel }, set: vm.setShowLevel))
                     row("Histogram", nil, Binding(get: { vm.settings.showHistogram }, set: vm.setShowHistogram))
+                    row("Shutter speed and ISO", "What the next photo will be shot at",
+                        Binding(get: { vm.settings.showExposureInfo }, set: vm.setShowExposureInfo))
                 }
                 Section("Opening the camera") {
                     row("Remember camera & settings", "Off: each start uses W, Yellow Portrait 400, default sliders",
@@ -1232,8 +1271,8 @@ private struct HardwareShutter: ViewModifier {
     }
 }
 
-/** What the landscape slider changes: Brightness or Warmth (Filter in B&W mode). */
-private enum Adjust { case brightness, warmth }
+/** What the landscape slider changes: Exposure or Warmth (Filter in B&W mode). */
+private enum Adjust { case exposure, warmth }
 
 /** A round picker chip: the setting's letter with its value under it; filled while its setting is on the slider. */
 private struct AdjustChip: View {

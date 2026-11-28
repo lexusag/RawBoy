@@ -30,8 +30,14 @@ final class CameraController: NSObject, @unchecked Sendable {
         var iso: Float = 0
         /** Current exposure duration in seconds (0 = unknown), for scene recognition. */
         var exposureSeconds: Float = 0
-        /** The exposure target bias the camera applies (EV), from Brightness: see setExposureBias. */
+        /**
+         * EV the frames carry over AE's metering: a still's manual exposure (Exposure, ExposureProgram) while it is
+         * set, else 0. The live develop takes it out, so the viewfinder doesn't jump while a shot is exposed by hand.
+         */
         var compensationEv: Float = 0
+        /** The sensor's ISO and exposure time range, for the shutter speed and ISO readout (stillExposure). */
+        var isoRange: ClosedRange<Float> = 0...0
+        var exposureRangeNs: ClosedRange<Int64> = 0...0
         /** Faces in upright normalised coordinates (as shown). */
         var faces: [CGRect] = []
         var focusing = false
@@ -47,36 +53,111 @@ final class CameraController: NSObject, @unchecked Sendable {
         let iso: Float
         /** Exposure duration in seconds at the shutter (0 = unknown, falls back to DNG EXIF). */
         let exposureSeconds: Float
-        /** The exposure target bias the shot was taken with (EV): the develop takes it back out (AutoTone captureEv). */
+        /**
+         * EV the raw got over AE's metered exposure (Exposure's manual exposure, as the camera applied it; 0 at the
+         * metered exposure): the develop takes it back out (AutoTone captureEv) and adds the Exposure setting.
+         */
         let compensationEv: Float
     }
 
-    /** Brightness as exposure compensation (EV), applied on every (re)configuration; the camera queue's own. */
-    private var exposureBiasEv: Float = 0
-
     /**
-     * Shoot [ev] brighter or darker than the camera's AE: Brightness changes the capture (shutter, ISO), not only the
-     * develop, so a brighter setting gathers more light. The develop removes what was applied (AutoTone captureEv),
-     * so the picture's brightness still comes from the Brightness adjustment alone.
+     * A still being exposed by hand (Exposure != 0): AE's metered exposure it started from, and how many captures
+     * still use the manual exposure (back-to-back shots share it). The camera queue's own; nil = AE runs.
      */
-    func setExposureBias(_ ev: Float) {
-        queue.async {
-            self.exposureBiasEv = ev
-            guard let device = self.input?.device else { return }
-            self.applyExposureBias(device)
-        }
-    }
+    private var manual: (meteredNs: Int64, meteredIso: Float, captures: Int)?
 
-    /** Sets the device's exposure target bias within its range; call on the queue. */
-    private func applyExposureBias(_ device: AVCaptureDevice) {
-        let bias = min(max(exposureBiasEv, device.minExposureTargetBias), device.maxExposureTargetBias)
-        guard bias != device.exposureTargetBias else { return }
+    /** AE meters at 0: an exposure target bias left from an older version (Brightness) is cleared. Call on the queue. */
+    private func clearExposureBias(_ device: AVCaptureDevice) {
+        guard device.exposureTargetBias != 0 else { return }
         do {
             try device.lockForConfiguration()
-            device.setExposureTargetBias(bias, completionHandler: nil)
+            device.setExposureTargetBias(0, completionHandler: nil)
             device.unlockForConfiguration()
         } catch {
             Self.log.error("exposure bias: \(error.localizedDescription)")
+        }
+    }
+
+    /**
+     * The manual exposure a still at [ev] would get now (the shutter speed and ISO readout), from the frames' metered
+     * exposure; nil before the first frame.
+     */
+    func stillExposure(ev: Float) -> ExposureProgram.Exposure? {
+        let st = frames
+        guard st.iso > 0, st.exposureSeconds > 0, st.isoRange.upperBound > 0 else { return nil }
+        let t0 = Int64((Double(st.exposureSeconds) * 1e9).rounded())
+        if ev == 0 || st.compensationEv != 0 { return ExposureProgram.Exposure(exposureNs: t0, iso: Int(st.iso.rounded())) }
+        return ExposureProgram.compute(ev: ev, t0Ns: t0, iso0: st.iso, isoMin: Int(st.isoRange.lowerBound.rounded(.up)),
+                                       isoMax: Int(st.isoRange.upperBound), expMin: st.exposureRangeNs.lowerBound,
+                                       expMax: st.exposureRangeNs.upperBound, maxStillNs: ExposureProgram.maxStillNs)
+    }
+
+    /**
+     * Sets the manual exposure for a still at [ev] over AE's metering (kept from an earlier manual shot still in
+     * flight), then calls [ready] on the queue with the EV the camera applied; [ready] gets nil where the device can't
+     * (no custom exposure). Call on the queue; each non-nil call must be matched by endManualExposure.
+     */
+    private func beginManualExposure(ev: Float, ready: @escaping (Float?) -> Void) {
+        guard let device = input?.device, device.isExposureModeSupported(.custom) else { ready(nil); return }
+        let format = device.activeFormat
+        let metered = manual.map { ($0.meteredNs, $0.meteredIso) }
+            ?? (Int64((device.exposureDuration.seconds * 1e9).rounded()), device.iso)
+        guard metered.0 > 0, metered.1 > 0 else { ready(nil); return }
+        let expMin = Int64((format.minExposureDuration.seconds * 1e9).rounded(.up))
+        let expMax = Int64((format.maxExposureDuration.seconds * 1e9).rounded(.down))
+        let program = ExposureProgram.compute(
+            ev: ev, t0Ns: metered.0, iso0: metered.1, isoMin: Int(format.minISO.rounded(.up)), isoMax: Int(format.maxISO),
+            expMin: expMin, expMax: expMax, maxStillNs: ExposureProgram.maxStillNs)
+        let iso = min(max(Float(program.iso), format.minISO), format.maxISO)
+        do {
+            try device.lockForConfiguration()
+        } catch {
+            Self.log.error("manual exposure: \(error.localizedDescription)")
+            ready(nil)
+            return
+        }
+        manual = (metered.0, metered.1, (manual?.captures ?? 0) + 1)
+        let meteredGain = Double(metered.0) / 1e9 * Double(metered.1)
+        // Once: the frames at the new exposure have arrived, or (no completion, e.g. the session was interrupted) a
+        // second has passed and the shot goes ahead at what the camera reports.
+        let once = Once()
+        let proceed = { [weak self] in
+            guard let self, once.first() else { return }
+            // What the camera applied (it may round the time or ISO), measured against the same metering.
+            let applied = ExposureProgram.capturedEv(
+                exposureNs: Int64((device.exposureDuration.seconds * 1e9).rounded()), iso: device.iso, meteredGain: meteredGain)
+            self.stateLock.withLock { self.state.compensationEv = applied }
+            Self.log.notice("exposure \(ev) EV: metered \(metered.0) ns ISO \(metered.1) -> \(program.exposureNs) ns ISO \(program.iso), raw \(applied) EV")
+            ready(applied)
+        }
+        device.setExposureModeCustom(duration: CMTime(value: program.exposureNs, timescale: 1_000_000_000), iso: iso) { [weak self] _ in
+            self?.queue.async { proceed() }
+        }
+        device.unlockForConfiguration()
+        queue.asyncAfter(deadline: .now() + 1) { proceed() }
+    }
+
+    /** One manual still is done: AE takes over once none is left (or the lock holds AE's exposure). Call on the queue. */
+    private func endManualExposure() {
+        guard var m = manual else { return }
+        m.captures -= 1
+        if m.captures > 0 { manual = m; return }
+        manual = nil
+        stateLock.withLock { state.compensationEv = 0 }
+        guard let device = input?.device else { return }
+        do {
+            try device.lockForConfiguration()
+            if exposureLocked {
+                // Back to the exposure the lock held.
+                device.setExposureModeCustom(duration: CMTime(value: m.meteredNs, timescale: 1_000_000_000),
+                                             iso: min(max(m.meteredIso, device.activeFormat.minISO), device.activeFormat.maxISO),
+                                             completionHandler: nil)
+            } else if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            device.unlockForConfiguration()
+        } catch {
+            Self.log.error("end manual exposure: \(error.localizedDescription)")
         }
     }
 
@@ -222,7 +303,12 @@ final class CameraController: NSObject, @unchecked Sendable {
         }
         if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
         device.unlockForConfiguration()
-        applyExposureBias(device)
+        // A new lens meters afresh: a manual exposure in flight belonged to the old one.
+        manual = nil
+        stateLock.withLock {
+            state.compensationEv = 0
+        }
+        clearExposureBias(device)
         applyExposureLock(device)
 
         if videoFormat {
@@ -538,52 +624,89 @@ final class CameraController: NSObject, @unchecked Sendable {
      * Takes a raw still; [onShutter] runs when the camera captures it (shutter feedback). [deviceDegrees] is how the
      * phone is held clockwise from upright portrait (0, 90, 180, 270). [gps]: ImageIO's GPS dictionary for the DNG
      * (LocationTracker.gpsMetadata), or nil. [shutterSound] false silences the system's click where that is allowed
-     * (shutterSoundRequired).
+     * (shutterSoundRequired). [exposureEv]: the Exposure setting; a still without flash at != 0 is exposed by hand
+     * along ExposureProgram (flash shots keep the iPhone's flash AE, and the develop adds the whole EV).
      */
     func captureDng(flash: FlashMode, shutterSound: Bool, deviceDegrees: Int = 0, gps: [String: Any]? = nil,
-                    onShutter: @escaping @Sendable () -> Void) async throws -> CaptureResult {
+                    exposureEv: Float = 0, onShutter: @escaping @Sendable () -> Void) async throws -> CaptureResult {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<CaptureResult, Error>) in
             queue.async {
-                guard let rawType = self.rawType else {
+                guard self.rawType != nil else {
                     c.resume(throwing: Failure(message: "camera not ready"))
                     return
                 }
-                let settings = AVCapturePhotoSettings(rawPixelFormatType: rawType)
-                settings.maxPhotoDimensions = self.photoOutput.maxPhotoDimensions
-                if self.current?.hasFlash == true, self.photoOutput.supportedFlashModes.contains(.on) {
-                    settings.flashMode = flash == .on ? .on : .off
-                }
-                if #available(iOS 18.0, *), self.photoOutput.isShutterSoundSuppressionSupported {
-                    settings.isShutterSoundSuppressionEnabled = !shutterSound
-                }
-                // The photo's orientation: how the phone is held, level with the horizon, relative to this sensor's
-                // portrait mounting angle (avoids RotationCoordinator resetting to portrait on lens switches or tilt).
-                let isFront = self.current?.isFront == true
-                let angle = CGFloat(CameraOrientation.photoRotationAngle(
-                    portraitAngle: self.portraitCaptureAngle, deviceDegrees: deviceDegrees, isFront: isFront))
-                if let connection = self.photoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(angle) {
-                    connection.videoRotationAngle = angle
-                    if connection.isVideoMirroringSupported {
-                        connection.automaticallyAdjustsVideoMirroring = false
-                        connection.isVideoMirrored = isFront
+                // A shot in flight still holds a manual exposure: this one goes through it too (at its own EV).
+                if (exposureEv != 0 || self.manual != nil) && flash == .off {
+                    self.beginManualExposure(ev: exposureEv) { applied in
+                        self.shoot(flash: flash, shutterSound: shutterSound, deviceDegrees: deviceDegrees, gps: gps,
+                                   manualEv: applied, onShutter: onShutter, c)
                     }
-                    Self.log.notice("capture orientation: device \(deviceDegrees)°, portrait \(self.portraitCaptureAngle)°, front \(isFront) -> angle \(Int(angle))°")
+                } else {
+                    self.shoot(flash: flash, shutterSound: shutterSound, deviceDegrees: deviceDegrees, gps: gps,
+                               manualEv: nil, onShutter: onShutter, c)
                 }
-                let iso = self.input?.device.iso ?? 0
-                let rawDur = self.input?.device.exposureDuration.seconds ?? 0
-                let exposureSeconds: Float = rawDur.isFinite && rawDur > 0 ? Float(rawDur) : 0
-                let bias = self.input?.device.exposureTargetBias ?? 0
-                let delegate = PhotoDelegate(gps: gps, onShutter: onShutter) { [weak self] result in
-                    self?.queue.async { self?.captures[settings.uniqueID] = nil }
-                    switch result {
-                    case let .success(data):
-                        c.resume(returning: CaptureResult(dng: data, iso: iso, exposureSeconds: exposureSeconds, compensationEv: bias))
-                    case let .failure(error): c.resume(throwing: error)
-                    }
-                }
-                self.captures[settings.uniqueID] = delegate
-                self.photoOutput.capturePhoto(with: settings, delegate: delegate)
             }
+        }
+    }
+
+    /**
+     * Takes the still now, on the queue. [manualEv]: the EV a manual exposure (beginManualExposure) gave the raw, nil
+     * at AE's own exposure; a manual shot ends it when done.
+     */
+    private func shoot(flash: FlashMode, shutterSound: Bool, deviceDegrees: Int, gps: [String: Any]?, manualEv: Float?,
+                       onShutter: @escaping @Sendable () -> Void, _ c: CheckedContinuation<CaptureResult, Error>) {
+        guard let rawType = self.rawType else {
+            if manualEv != nil { self.endManualExposure() }
+            c.resume(throwing: Failure(message: "camera not ready"))
+            return
+        }
+        let settings = AVCapturePhotoSettings(rawPixelFormatType: rawType)
+        settings.maxPhotoDimensions = self.photoOutput.maxPhotoDimensions
+        if self.current?.hasFlash == true, self.photoOutput.supportedFlashModes.contains(.on) {
+            settings.flashMode = flash == .on ? .on : .off
+        }
+        if #available(iOS 18.0, *), self.photoOutput.isShutterSoundSuppressionSupported {
+            settings.isShutterSoundSuppressionEnabled = !shutterSound
+        }
+        // The photo's orientation: how the phone is held, level with the horizon, relative to this sensor's
+        // portrait mounting angle (avoids RotationCoordinator resetting to portrait on lens switches or tilt).
+        let isFront = self.current?.isFront == true
+        let angle = CGFloat(CameraOrientation.photoRotationAngle(
+            portraitAngle: self.portraitCaptureAngle, deviceDegrees: deviceDegrees, isFront: isFront))
+        if let connection = self.photoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(angle) {
+            connection.videoRotationAngle = angle
+            if connection.isVideoMirroringSupported {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.isVideoMirrored = isFront
+            }
+            Self.log.notice("capture orientation: device \(deviceDegrees)°, portrait \(self.portraitCaptureAngle)°, front \(isFront) -> angle \(Int(angle))°")
+        }
+        let iso = self.input?.device.iso ?? 0
+        let rawDur = self.input?.device.exposureDuration.seconds ?? 0
+        let exposureSeconds: Float = rawDur.isFinite && rawDur > 0 ? Float(rawDur) : 0
+        let compensation = manualEv ?? 0
+        let delegate = PhotoDelegate(gps: gps, onShutter: onShutter) { [weak self] result in
+            self?.queue.async {
+                self?.captures[settings.uniqueID] = nil
+                if manualEv != nil { self?.endManualExposure() }
+            }
+            switch result {
+            case let .success(data):
+                c.resume(returning: CaptureResult(dng: data, iso: iso, exposureSeconds: exposureSeconds, compensationEv: compensation))
+            case let .failure(error): c.resume(throwing: error)
+            }
+        }
+        self.captures[settings.uniqueID] = delegate
+        self.photoOutput.capturePhoto(with: settings, delegate: delegate)
+    }
+
+    /** True the first time only; used on the camera queue. */
+    private final class Once: @unchecked Sendable {
+        private var done = false
+        func first() -> Bool {
+            if done { return false }
+            done = true
+            return true
         }
     }
 
@@ -649,9 +772,13 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             let rawDur = device.exposureDuration.seconds
             let exposureSeconds: Float = rawDur.isFinite && rawDur > 0 ? Float(rawDur) : 0
             let focusing = device.isAdjustingFocus
-            let bias = device.exposureTargetBias
+            let format = device.activeFormat
+            let isoRange = format.minISO...max(format.minISO, format.maxISO)
+            let expMin = Int64((format.minExposureDuration.seconds * 1e9).rounded(.up))
+            let expMax = max(expMin, Int64((format.maxExposureDuration.seconds * 1e9).rounded(.down)))
             stateLock.withLock {
-                state.compensationEv = bias
+                state.isoRange = isoRange
+                state.exposureRangeNs = expMin...expMax
                 state.whiteXY = [Double(xy.x), Double(xy.y)]
                 state.iso = iso
                 state.exposureSeconds = exposureSeconds
