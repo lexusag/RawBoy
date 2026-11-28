@@ -69,6 +69,11 @@ final class CameraViewModel: ObservableObject {
     /** RGB levels of the live develop (settings.showHistogram), nil when off or before the first one. */
     @Published private(set) var histogram: Histogram?
     /**
+     * Shutter speed and ISO the next photo would get (settings.showExposureInfo, photo mode), from the live metering
+     * and Exposure; nil when off or not known yet.
+     */
+    @Published private(set) var stillExposure: ExposureProgram.Exposure?
+    /**
      * How far the phone is turned clockwise from upright portrait (continuous degrees, unwrapped across 360°), for the
      * level line; nil while the level is off or the phone lies flat.
      */
@@ -120,7 +125,7 @@ final class CameraViewModel: ObservableObject {
         let iso: Float
         /** Exposure duration in seconds at the shutter (0 = unknown, falls back to DNG EXIF). */
         let exposureSeconds: Float
-        /** Exposure target bias the shot was taken with (Brightness), taken back out by the develop. */
+        /** EV the raw got over AE's metering (Exposure's manual exposure), taken back out by the develop. */
         let compensationEv: Float
         /** The camera saw a face at the shutter: run skin detection. */
         let mayHaveFace: Bool
@@ -257,7 +262,6 @@ final class CameraViewModel: ObservableObject {
                 let lens = info ?? all.first { $0.label == settings.lens } ?? all.first { $0.label == "W" } ?? all[0]
                 info = lens
                 flashAvailable = lens.hasFlash
-                controller.setExposureBias(Self.exposureBias(settings))
                 recording = try await controller.start(lens, format: settings.rawFormat, video: videoMode)
                 guard !Task.isCancelled else { return }
                 shutterSoundRequired = controller.shutterSoundRequired
@@ -354,9 +358,9 @@ final class CameraViewModel: ObservableObject {
     /** Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording (Android's VIDEO_EV_STEP). */
     private static let videoEvStep: Float = 0.05
 
-    /// The viewfinder's live exposure: only the metering eases ([step] EV per update); Brightness's AE compensation
-    /// ([captureEv]) is taken out at once, as the phone's AE puts it into the frames within a few frames. Easing the whole
-    /// exposure overshot a Brightness move by over a stop and sank back over ~2 s. Port of Android's `LiveExposure.ease`.
+    /// The viewfinder's live exposure: only the metering eases ([step] EV per update); a still's manual exposure
+    /// ([captureEv], while the frames carry it) is taken out at once. Easing the whole exposure overshot a compensation
+    /// change by over a stop and sank back over ~2 s. Port of Android's `LiveExposure.ease`.
     static func easedExposure(last: Float?, lastCaptureEv: Float, exposure: Float, captureEv: Float, step: Float) -> Float {
         guard let last else { return exposure }
         let lastMetered = last + lastCaptureEv
@@ -507,7 +511,7 @@ final class CameraViewModel: ObservableObject {
                 guard let self else { return }
                 self.analysing = false
                 // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at
-                // once; the viewfinder eases there over a few updates instead of snapping. Brightness's compensation isn't
+                // once; the viewfinder eases there over a few updates instead of snapping. A manual exposure's EV isn't
                 // eased (see easedExposure). While AE/WB lock is active, hold the locked exposure without re-metering.
                 var eased = auto
                 var shownCaptureEv = captureEv
@@ -516,8 +520,8 @@ final class CameraViewModel: ObservableObject {
                     if self.lockedExposureEv == nil { self.lockedExposureEv = held }
                     eased.exposure = held
                 } else {
-                    // Video: the phone's AE takes a second or so to bring a Brightness change into the frames, so the
-                    // compensation the develop takes back out follows it with a lag, else the picture swings up and down.
+                    // Video: the compensation the develop takes back out follows with a lag, else the picture swings up
+                    // and down (video takes no stills, so it is 0 there anyway).
                     if self.videoMode, let last = self.live {
                         shownCaptureEv = last.captureEv + 0.3 * (captureEv - last.captureEv)
                         eased.exposure = auto.exposure + captureEv - shownCaptureEv
@@ -541,6 +545,7 @@ final class CameraViewModel: ObservableObject {
                     }
                 }
                 self.live = Live(base: base, stats: stats, defaults: shownDefaults, auto: eased, captureEv: shownCaptureEv)
+                self.updateStillExposure()
                 self.publish()
             }
         }
@@ -668,13 +673,31 @@ final class CameraViewModel: ObservableObject {
     }
     func setFilter(_ f: BwFilter) { change { $0.filter = f } }
     func setStrength(_ v: Float) { change { $0.strength = v } }
-    func setBrightness(_ v: Float) {
-        change { $0.brightness = v }
-        controller.setExposureBias(Self.exposureBias(settings))
+    /**
+     * Exposure (EV, snapped to thirds): the viewfinder shows it at once in the develop; stills at != 0 are exposed by
+     * hand (CameraController.captureDng, ExposureProgram).
+     */
+    func setExposure(_ ev: Float) {
+        let snapped = ExposureProgram.snap(ev)
+        guard snapped != settings.exposureEv else { return }
+        change { $0.exposureEv = snapped }
+        updateStillExposure()
+    }
+    func setShowExposureInfo(_ on: Bool) {
+        change { $0.showExposureInfo = on }
+        updateStillExposure()
     }
 
-    /** Brightness also shoots brighter or darker (exposure target bias), as many stops as it adds to the develop. */
-    private static func exposureBias(_ s: CameraSettings) -> Float { s.brightness / 100 * LookApplier.brightnessEv }
+    /** The readout's shutter speed and ISO: a flash shot keeps the iPhone's own (flash) exposure, so it shows AE's. */
+    private func updateStillExposure() {
+        guard settings.showExposureInfo, !videoMode else {
+            if stillExposure != nil { stillExposure = nil }
+            return
+        }
+        let flash = info?.hasFlash == true && settings.flash != .off
+        let e = controller.stillExposure(ev: flash ? 0 : settings.exposureEv)
+        if e != stillExposure { stillExposure = e }
+    }
     func setWarmth(_ v: Float) { change { $0.warmth = v } }
     func setJpegQuality(_ q: Int) { change { $0.jpegQuality = min(max(q, CameraSettings.minQuality), 100) } }
     func setKeepDng(_ keep: Bool) { change { $0.keepDng = keep } }
@@ -911,7 +934,6 @@ final class CameraViewModel: ObservableObject {
         let prev = settings
         let next = prev.resetToDefaults()
         change { $0 = next }
-        controller.setExposureBias(Self.exposureBias(settings))
         if prev.front != next.front {
             let all = CameraController.lenses(front: next.front)
             if let target = all.first(where: { $0.label == next.lens }) ?? all.first {
@@ -1172,8 +1194,9 @@ final class CameraViewModel: ObservableObject {
         guard status == .ready else { return }
         let s = settings
         let flash = info?.hasFlash == true ? s.flash : .off
-        // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
-        let viewfinderKey = flash == .off ? live?.stats.key : nil
+        // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it. Nor from a shot exposed
+        // by hand (Exposure != 0): its raw isn't at the viewfinder's metering.
+        let viewfinderKey = flash == .off && s.exposureEv == 0 ? live?.stats.key : nil
         let mayHaveFace = !controller.frames.faces.isEmpty
         // The photo is level with the horizon; the tap was on the (portrait) viewfinder.
         let degrees = currentDeviceDegrees()
@@ -1187,7 +1210,8 @@ final class CameraViewModel: ObservableObject {
         Task {
             do {
                 let result = try await controller.captureDng(flash: flash, shutterSound: s.shutterSound,
-                                                             deviceDegrees: degrees, gps: gps) { [weak self] in
+                                                             deviceDegrees: degrees, gps: gps,
+                                                             exposureEv: s.exposureEv) { [weak self] in
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
@@ -1281,7 +1305,8 @@ final class CameraViewModel: ObservableObject {
                     let autoBase: DevelopParams
                     if let lockedEv = shot.lockedExposureEv {
                         var fixed = a.autoBase
-                        fixed.exposure = lockedEv
+                        // The held exposure is for the metered raw; a manual exposure (Exposure) put more or less light in.
+                        fixed.exposure = lockedEv - shot.compensationEv
                         autoBase = fixed
                     } else {
                         autoBase = SceneRecognition.apply(a.autoBase, stats: a.stats, light: sceneLight)
@@ -1314,7 +1339,7 @@ final class CameraViewModel: ObservableObject {
                             mode: fields.contains(.mode) ? mode : nil,
                             exposureTime: fields.contains(.shutter) ? info.exposureTime : nil,
                             fNumber: fields.contains(.aperture) ? info.fNumber : nil,
-                            compensationEv: fields.contains(.exposureComp) ? s.exposureCompensationEv : nil,
+                            compensationEv: fields.contains(.exposureComp) ? s.exposureEv : nil,
                             spotMetered: fields.contains(.metering) ? shot.spotMetered : nil,
                             focalLengthMm: fields.contains(.focalLength) ? focalMm : nil,
                             iso: fields.contains(.iso) ? isoVal : nil,

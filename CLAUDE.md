@@ -205,7 +205,13 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   rounding; metered gain = preview t × ISO × `stillGain`, or × boost under `AE_GAIN_IN_RAW`), `Still.compensationEv` =
   what reached the raw (`Program.capturedEv` from the result), so AutoTone's captureEv takes it out and the develop adds
   the Exposure. Those shots skip viewfinder calibration. Readout: `CameraSettings.showExposureInfo` (off by default) /
-  Street → `CameraController.stillExposure`. Before that (history, iOS still does this):
+  Street → `CameraController.stillExposure`. iOS (2026-11-28) the same: `capture/ExposureProgram.swift` (port, same tests in
+  `EngineTests/ExposureProgramTests`, also `snap`), `CameraController.captureDng(exposureEv:)` → `beginManualExposure`
+  (`setExposureModeCustom`, waits for its completion, ≤ 1 s; back-to-back shots share the metering, `endManualExposure`
+  restores AE or the lock's exposure when the last is done; `FrameState.compensationEv` = the manual EV meanwhile, so the
+  live develop takes it out), flash shots keep the flash AE (develop only), a locked AE shot develops at
+  `lockedExposureEv − compensationEv`; any old target bias is cleared. ProRAW's fusion under a custom exposure is unchecked
+  on the phone. Before that (history):
   Brightness (2026-10-31) also goes into the capture as AE compensation (`CameraController.setExposureBias`: Camera2
   `CONTROL_AE_EXPOSURE_COMPENSATION` in `setCommon`, rounded to the step and range; iOS `setExposureTargetBias`), and
   `AutoTone.exposure(captureEv)` meters as if uncompensated, then subtracts it, so the picture equals the old
